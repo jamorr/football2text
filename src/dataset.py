@@ -1,19 +1,20 @@
+import pathlib
 import shutil
 from typing import Any
+
 import numpy as np
-import torch
-from torch.utils.data import Dataset, DataLoader
-from lightning.pytorch import LightningDataModule, seed_everything
-import pathlib
 import pandas as pd
+import torch
+from lightning.pytorch import LightningDataModule, seed_everything
+from torch.utils.data import DataLoader, Dataset
+
 
 class NFLDataset(Dataset):
     def __init__(self, data_path:pathlib.Path) -> None:
         super().__init__()
         assert data_path.exists()
-        self.target = pd.read_parquet(data_path/'target.parquet')
-
-        self.players = pd.read_parquet(data_path/'players.parquet')
+        self.target = pd.read_parquet(data_path/'target.parquet').convert_dtypes(dtype_backend='numpy_nullable')
+        self.players = pd.read_parquet(data_path/'players.parquet').convert_dtypes(dtype_backend='numpy_nullable')
         self.play_dir = data_path/'tracking_weeks'
 
     def __len__(self):
@@ -21,9 +22,17 @@ class NFLDataset(Dataset):
 
     def __getitem__(self, index) -> Any:
         target_play = self.target.iloc[index]
-        play_data = pd.read_parquet(self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play['playId']}')
+        play_data = pd.read_parquet(self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}').convert_dtypes(dtype_backend='numpy_nullable')
         players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
-        return play_data, players, target_play
+        play_data = [play_data[c].values.to_numpy() for c in play_data.columns]
+        players = [players[c].values.to_numpy() for c in players.columns]
+        target_play = target_play.values
+        # print(type(play_data.values), type(players.values), type(target_play.values))
+        # print(play_data.values.dtype, players.values.dtype, target_play.values.dtype)
+        # exit()
+        # print([play_data[i].dtype for i in range(len(play_data))])
+
+        return [p for p in play_data if p.dtype != np.dtype('O')], [p for p in players if p.dtype != np.dtype('O')]#, target_play
 
 
 class NFLDataModule(LightningDataModule):
@@ -65,9 +74,9 @@ class NFLDataModule(LightningDataModule):
         self._move_files_to_split_directory("test", test_df)
         self._move_files_to_split_directory("val", val_df)
 
+
     def _move_files_to_split_directory(self, split_name, split_df):
         split_dir:pathlib.Path = self.data_path/split_name/"tracking_weeks"
-        split_df.to_parquet(self.data_path/f"{split_name}_target.parquet")
 
         for idx, data in split_df[['gameId', 'playId']].iterrows():
             game_dir_name = f"gameId={data['gameId']}"
@@ -79,23 +88,26 @@ class NFLDataModule(LightningDataModule):
                 dest_dir.mkdir(parents=True)
             shutil.move(src_path, dest_dir/play_dir_name)
 
+        split_df.to_parquet(self.data_path/split_name/"target.parquet")
+        shutil.copy(self.data_path/"players.parquet", self.data_path/split_name/"players.parquet")
+
 
     def setup(self, which):
         setattr(self, f"{which}_dataset",  NFLDataset(data_path=self.data_path/which))
 
     def train_dataloader(self) -> Any:
         return DataLoader(
-            self.train_dataset
+            self.train_dataset,
             **self.loader_args)
 
     def val_dataloader(self) -> Any:
         return DataLoader(
-            self.val_dataset
+            self.val_dataset,
             **self.loader_args)
 
     def test_dataloader(self) -> Any:
         return DataLoader(
-            self.test_dataset
+            self.test_dataset,
             **self.loader_args)
 
 
@@ -104,18 +116,18 @@ if __name__ == '__main__':
     data_dir = pathlib.Path('../data')
     seed_everything(37, True)
     print(data_dir.absolute())
-    NFLDataModule(data_dir).prepare_data()
-    # data = NFLDataset(data_dir)
-    # no_missing = 0
-    # start = time.perf_counter()
-    # for i in range(len(data)):
-    #     try:
-    #         data[i]
-    #     except FileNotFoundError:
-    #         no_missing += 1
-    #         # print(f"No file for {i}")
-    # print(f" All files read in {time.perf_counter()-start:.2f}s")
-    # if no_missing == 0:
-    #     print("Passed checks")
-    # else:
-    #     print(f"Missing {no_missing} files out of {len(data)}...")
+    dmod = NFLDataModule(data_dir, batch_size=10)
+    if not (data_dir/"train").exists():
+        dmod.prepare_data()
+    dmod.setup("train")
+    data = dmod.train_dataloader()
+    no_missing = 0
+    start = time.perf_counter()
+
+    for d in data:
+        pass
+    print(f" All files read in {time.perf_counter()-start:.2f}s")
+    if no_missing == 0:
+        print("Passed checks")
+    else:
+        print(f"Missing {no_missing} files out of {len(data)}...")
