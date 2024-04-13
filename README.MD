@@ -7,6 +7,8 @@ Deep learning project for turning American football tracking data into text.
 Graph2Text, Image2Text
 
 # Requirements
-`python=3.10`
-`cuda>=11.8`
-`torch>1.13`
+```
+python=3.10
+cuda>=11.8
+torch>1.13
+```
