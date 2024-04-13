@@ -8,7 +8,8 @@ import torch
 from lightning.pytorch import LightningDataModule, seed_everything
 from torch.utils.data import DataLoader, Dataset
 
-
+# TODO: #2 add padding to make stackable outputs/batchsize > 1
+# TODO: #1 preprocess text into token ids
 class NFLDataset(Dataset):
     def __init__(self, data_path:pathlib.Path) -> None:
         super().__init__()
