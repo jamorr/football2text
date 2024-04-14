@@ -94,8 +94,9 @@ class NFLDataModule(LightningDataModule):
 
     def _move_files_to_split_directory(self, split_name, split_df):
         (self.data_path/split_name).mkdir()
-        split_dir:pathlib.Path = self.data_path/split_name/"tracking_weeks"
 
+        split_dir:pathlib.Path = self.data_path/split_name/"tracking_weeks"
+        split_dir.mkdir()
         for idx, data in split_df[['gameId', 'playId']].iterrows():
             game_dir_name = f"gameId={data['gameId']}"
             play_dir_name = f"playId={data['playId']}"
