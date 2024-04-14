@@ -21,6 +21,8 @@ class NFLDataset(Dataset):
 
         self.target = pd.read_parquet(data_path/'target.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
         self.players = pd.read_parquet(data_path/'players.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
+        self.id_cols = ['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']
+        self.tracking_cols = ['x', 'y', 's', 'a', 'dis', 'o', 'dir']
         # TODO: Add support for the mapping of ids to strings
         # self.teams = pd.read_parquet(data_path/'team_id_map.parquet', dtype_backend='numpy_nullable')
         # self.directions = pd.read_parquet(data_path/'direction_id_map.parquet', dtype_backend='numpy_nullable')
@@ -37,13 +39,15 @@ class NFLDataset(Dataset):
             columns=['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event', 'x', 'y', 's', 'a', 'dis', 'o', 'dir']
         )
         # id columns
-        play_data[['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']] = play_data[['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']].astype(np.int32)
+
+        play_data[self.id_cols] = play_data[self.id_cols].astype(np.int32)
         # tracking data columns
-        play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']] = play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']].astype(np.float32)
+        play_data[self.tracking_cols] = play_data[self.tracking_cols].astype(np.float32)
+        play_data = play_data[self.id_cols + self.tracking_cols]
         # organize into frames
-        framewise_data = np.dstack([group.values for _, group in play_data.groupby("frameId", as_index=True)])
-        int_cols = framewise_data[:, :3, :].astype(np.int32)  # Contains the first three columns
-        float_cols = framewise_data[:, 3:, :]
+        framewise_data = np.array([group.values for _, group in play_data.groupby("frameId", as_index=True)])
+        int_cols = framewise_data[:, :6, :].astype(np.int32)  # Contains the first three columns
+        float_cols = framewise_data[:, 6:, :].astype(np.float32)
         if self.include_str_types:
             players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
             return int_cols, float_cols, players, target_play

@@ -91,7 +91,7 @@ def generate_graph(
         timestamp, feature, coord, label, person_id, global_id = [], [], [], [], [], []
 
         for ts, ids, tracking in twd:
-
+            np.unique(ids[0])
             for entity in data[f"{fts:g}"]:
                 timestamp.append(fts)
                 feature.append(entity["feature"])
@@ -155,7 +155,17 @@ def generate_graph(
 def generate_graphs(dl:DataLoader, graph_dir:pathlib.Path):
     start = time.perf_counter()
     for ids, tracking in dl:
+        # print(ids[0])
+        # print(ids[0, 0])
+        print(ids.shape)
+        exit()
+        # print(len(batch))
+
+        # for ids, tracking in batch:
+        #     print(ids[0])
+        #     exit()
         pass
+    # print(tracking)
     print(f"Iteration time: {time.perf_counter()-start:.2f}s")
 
 if __name__ == "__main__":
@@ -164,8 +174,8 @@ if __name__ == "__main__":
     print(data_dir)
     graph_dir = data_dir/"graphs"
     dmod = NFLDataModule(data_dir)
-    dmod.setup('train')
-    dl = dmod.train_dataloader()
+    dmod.setup('val')
+    dl = dmod.val_dataloader()
     if not graph_dir.exists():
         graph_dir.mkdir()
     generate_graphs(dl, graph_dir)
