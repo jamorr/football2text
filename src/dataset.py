@@ -45,6 +45,7 @@ class NFLDataset(Dataset):
         play_data[self.tracking_cols] = play_data[self.tracking_cols].astype(np.float32)
         play_data = play_data[self.id_cols + self.tracking_cols]
         # organize into frames
+        # print([group for _, group in play_data.groupby("frameId", as_index=True)][0])
         framewise_data = np.array([group.values for _, group in play_data.groupby("frameId", as_index=True)])
         int_cols = framewise_data[:, :, :len(self.id_cols)].astype(np.int32)  # Contains the first three columns
         float_cols = framewise_data[:, :, len(self.id_cols):].astype(np.float32)
