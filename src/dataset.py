@@ -8,6 +8,8 @@ import torch
 from lightning.pytorch import LightningDataModule, seed_everything
 from torch.utils.data import DataLoader, Dataset
 
+
+
 # TODO: #2 add padding to make stackable outputs/batchsize > 1
 # TODO: #1 preprocess text into token ids
 class NFLDataset(Dataset):
@@ -23,17 +25,31 @@ class NFLDataset(Dataset):
 
     def __getitem__(self, index) -> Any:
         target_play = self.target.iloc[index]
-        play_data = pd.read_parquet(self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}').convert_dtypes(dtype_backend='numpy_nullable')
-        players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
-        play_data = [play_data[c].values.to_numpy() for c in play_data.columns]
-        players = [players[c].values.to_numpy() for c in players.columns]
-        target_play = target_play.values
+        play_data = pd.read_parquet(
+            self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}',
+            dtype_backend='numpy_nullable',
+            columns=['nflId', 'frameId', 'jerseyNumber', 'x', 'y', 's', 'a', 'dis', 'o', 'dir']
+        )
+        # print(play_data.dtypes)
+
+        play_data[['nflId', 'frameId', 'jerseyNumber']] = play_data[['nflId', 'frameId', 'jerseyNumber']].fillna(-1).astype(np.int32)
+
+        # .values.astype('int32')
+        play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']] = play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']].astype(np.float32,)
+        # print(play_data)
+        framewise_data = np.dstack([group.values for _, group in play_data.groupby("frameId", as_index=True)])
+        # print(framewise_data.shape)
+        int_cols = framewise_data[:, :3, :].astype(np.int32)  # Contains the first three columns
+        float_cols = framewise_data[:, 3:, :]
+        #.convert_dtypes(dtype_backend='numpy_nullable')
+        # players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
+        # players = [players[c].values.to_numpy() for c in players.columns]
+        # target_play = target_play.values
         # print(type(play_data.values), type(players.values), type(target_play.values))
         # print(play_data.values.dtype, players.values.dtype, target_play.values.dtype)
         # exit()
         # print([play_data[i].dtype for i in range(len(play_data))])
-
-        return [p for p in play_data if p.dtype != np.dtype('O')], [p for p in players if p.dtype != np.dtype('O')]#, target_play
+        return int_cols, float_cols, #[p for p in players if p.dtype != np.dtype('O')]#, target_play
 
 
 class NFLDataModule(LightningDataModule):
