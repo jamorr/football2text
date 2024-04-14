@@ -36,9 +36,9 @@ class NFLDataset(Dataset):
             columns=['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event', 'x', 'y', 's', 'a', 'dis', 'o', 'dir']
         )
         # id columns
-        play_data[['nflId', 'frameId', 'jerseyNumber', 'club','playDirection', 'event']] = play_data[['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']].fillna(-1).astype(np.int32)
+        play_data[['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']] = play_data[['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']].astype(np.int32)
         # tracking data columns
-        play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']] = play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']].astype(np.float32,)
+        play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']] = play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']].astype(np.float32)
         # organize into frames
         framewise_data = np.dstack([group.values for _, group in play_data.groupby("frameId", as_index=True)])
         int_cols = framewise_data[:, :3, :].astype(np.int32)  # Contains the first three columns
