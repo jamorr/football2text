@@ -21,9 +21,10 @@ class NFLDataset(Dataset):
 
         self.target = pd.read_parquet(data_path/'target.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
         self.players = pd.read_parquet(data_path/'players.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
-        self.teams = pd.read_parquet(data_dir/'team_id_map.parquet', dtype_backend='numpy_nullable')
-        self.directions = pd.read_parquet(data_dir/'direction_id_map.parquet', dtype_backend='numpy_nullable')
-        self.events = pd.read_parquet(data_dir/'events_id_map.parquet', dtype_backend='numpy_nullable')
+        # TODO: Add support for the mapping of ids to strings
+        # self.teams = pd.read_parquet(data_path/'team_id_map.parquet', dtype_backend='numpy_nullable')
+        # self.directions = pd.read_parquet(data_path/'direction_id_map.parquet', dtype_backend='numpy_nullable')
+        # self.events = pd.read_parquet(data_path/'events_id_map.parquet', dtype_backend='numpy_nullable')
 
     def __len__(self):
         return len(self.target)
