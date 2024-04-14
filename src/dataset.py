@@ -13,12 +13,17 @@ from torch.utils.data import DataLoader, Dataset
 # TODO: #2 add padding to make stackable outputs/batchsize > 1
 # TODO: #1 preprocess text into token ids
 class NFLDataset(Dataset):
-    def __init__(self, data_path:pathlib.Path) -> None:
+    def __init__(self, data_path:pathlib.Path, include_str_types:bool) -> None:
         super().__init__()
         assert data_path.exists()
-        self.target = pd.read_parquet(data_path/'target.parquet').convert_dtypes(dtype_backend='numpy_nullable')
-        self.players = pd.read_parquet(data_path/'players.parquet').convert_dtypes(dtype_backend='numpy_nullable')
+        self.include_str_types = include_str_types
         self.play_dir = data_path/'tracking_weeks'
+
+        self.target = pd.read_parquet(data_path/'target.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
+        self.players = pd.read_parquet(data_path/'players.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
+        self.teams = pd.read_parquet(data_dir/'team_id_map.parquet', dtype_backend='numpy_nullable')
+        self.directions = pd.read_parquet(data_dir/'direction_id_map.parquet', dtype_backend='numpy_nullable')
+        self.events = pd.read_parquet(data_dir/'events_id_map.parquet', dtype_backend='numpy_nullable')
 
     def __len__(self):
         return len(self.target)
@@ -28,28 +33,21 @@ class NFLDataset(Dataset):
         play_data = pd.read_parquet(
             self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}',
             dtype_backend='numpy_nullable',
-            columns=['nflId', 'frameId', 'jerseyNumber', 'x', 'y', 's', 'a', 'dis', 'o', 'dir']
+            columns=['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event', 'x', 'y', 's', 'a', 'dis', 'o', 'dir']
         )
-        # print(play_data.dtypes)
-
-        play_data[['nflId', 'frameId', 'jerseyNumber']] = play_data[['nflId', 'frameId', 'jerseyNumber']].fillna(-1).astype(np.int32)
-
-        # .values.astype('int32')
+        # id columns
+        play_data[['nflId', 'frameId', 'jerseyNumber', 'club','playDirection', 'event']] = play_data[['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']].fillna(-1).astype(np.int32)
+        # tracking data columns
         play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']] = play_data[['x', 'y', 's', 'a', 'dis', 'o', 'dir']].astype(np.float32,)
-        # print(play_data)
+        # organize into frames
         framewise_data = np.dstack([group.values for _, group in play_data.groupby("frameId", as_index=True)])
-        # print(framewise_data.shape)
         int_cols = framewise_data[:, :3, :].astype(np.int32)  # Contains the first three columns
         float_cols = framewise_data[:, 3:, :]
-        #.convert_dtypes(dtype_backend='numpy_nullable')
-        # players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
-        # players = [players[c].values.to_numpy() for c in players.columns]
-        # target_play = target_play.values
-        # print(type(play_data.values), type(players.values), type(target_play.values))
-        # print(play_data.values.dtype, players.values.dtype, target_play.values.dtype)
-        # exit()
-        # print([play_data[i].dtype for i in range(len(play_data))])
-        return int_cols, float_cols, #[p for p in players if p.dtype != np.dtype('O')]#, target_play
+        if self.include_str_types:
+            players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
+            return int_cols, float_cols, players, target_play
+
+        return int_cols, float_cols
 
 
 class NFLDataModule(LightningDataModule):
@@ -57,6 +55,7 @@ class NFLDataModule(LightningDataModule):
         self,
         data_path:pathlib.Path=pathlib.Path('../data'),
         splits:tuple[float, float, float]=(0.75, 0.05, 0.2),
+        include_str_types:bool = False,
         **loader_args
 
         ):
@@ -64,13 +63,76 @@ class NFLDataModule(LightningDataModule):
         self.data_path:pathlib.Path = data_path
         self.splits = splits
         self.loader_args = loader_args
+        self.include_str_types = include_str_types
 
 
     def prepare_data(self) -> None:
         # assumes GLOBAL_RANK=0
         train, val, test = self.splits
         assert sum(self.splits) == 1
-        dataset = NFLDataset(self.data_path)
+
+        events = (
+            'autoevent_ballsnap',
+            'autoevent_passforward',
+            'autoevent_passinterrupted',
+            'ball_snap',
+            'first_contact',
+            'fumble',
+            'fumble_defense_recovered',
+            'fumble_offense_recovered',
+            'handoff',
+            'lateral',
+            'line_set',
+            'man_in_motion',
+            'out_of_bounds',
+            'pass_arrived',
+            'pass_forward',
+            'pass_outcome_caught',
+            'pass_outcome_touchdown',
+            'pass_shovel',
+            'penalty_accepted',
+            'penalty_flag',
+            'play_action',
+            'qb_sack',
+            'qb_slide',
+            'run',
+            'run_pass_option',
+            'safety',
+            'shift',
+            'snap_direct',
+            'tackle',
+            'touchdown'
+        )
+
+        team_names = pd.read_csv(self.data_path/"games.csv")['homeTeamAbbr'].unique()
+        play_direction = pd.Series(['left', 'right']).unique()
+
+        tracking_df = pd.DataFrame()
+        for file_path in data_dir.glob("tracking_week_*.csv"):
+            tracking_df = pd.read_csv(file_path, dtype_backend='pyarrow')
+            tracking_df['playDirection'] = pd.Categorical(tracking_df['playDirection'], categories=play_direction).codes
+            tracking_df['club'] = pd.Categorical(tracking_df['club'],categories=team_names).codes
+            tracking_df['event'] = pd.Categorical(tracking_df['event'],categories=events).codes
+            tracking_df.drop(["displayName", "time"], inplace=True, axis='columns')
+            tracking_df.fillna(-1, inplace=True)
+            tracking_df.to_parquet(self.data_path/"tracking_weeks", partition_cols=["gameId", "playId"])
+
+        events_to_id_df = pd.DataFrame({'id': range(len(events)), 'category': events})
+        events_to_id_df.to_parquet(data_dir/'events_id_map.parquet')
+
+        id_to_team_df = pd.DataFrame({'id': range(len(team_names)), 'category': team_names})
+        id_to_team_df.to_parquet(data_dir/'team_id_map.parquet')
+
+        id_to_direction_df = pd.DataFrame({'id': range(len(play_direction)), 'category': play_direction})
+        id_to_direction_df.to_parquet(data_dir/'direction_id_map.parquet')
+
+        players_df = pd.read_csv(data_dir/'players.csv', dtype_backend='pyarrow')
+        players_df.to_parquet(data_dir/'players.parquet')
+
+        target_df = pd.read_csv(data_dir/'plays.csv', dtype_backend='pyarrow')
+        target_df.to_parquet(data_dir/'target.parquet')
+
+        dataset = NFLDataset(self.data_path, False)
         missing_indices = []
         for i in range(len(dataset)):
             try:
@@ -91,6 +153,8 @@ class NFLDataModule(LightningDataModule):
         self._move_files_to_split_directory("test", test_df)
         self._move_files_to_split_directory("val", val_df)
 
+        shutil.rmtree(self.data_path/"tracking_weeks")
+
 
     def _move_files_to_split_directory(self, split_name, split_df):
         (self.data_path/split_name).mkdir()
@@ -109,10 +173,13 @@ class NFLDataModule(LightningDataModule):
 
         split_df.to_parquet(self.data_path/split_name/"target.parquet")
         shutil.copy(self.data_path/"players.parquet", self.data_path/split_name/"players.parquet")
+        shutil.copy(self.data_path/"team_id_map.parquet", self.data_path/split_name/"team_id_map.parquet")
+        shutil.copy(self.data_path/"direction_id_map.parquet", self.data_path/split_name/"direction_id_map.parquet")
+        shutil.copy(self.data_path/"events_id_map.parquet", self.data_path/split_name/"events_id_map.parquet")
 
 
     def setup(self, which):
-        setattr(self, f"{which}_dataset",  NFLDataset(data_path=self.data_path/which))
+        setattr(self, f"{which}_dataset",  NFLDataset(data_path=self.data_path/which, include_str_types=self.include_str_types))
 
     def train_dataloader(self) -> Any:
         return DataLoader(
