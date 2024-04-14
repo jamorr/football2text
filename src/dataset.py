@@ -130,10 +130,10 @@ class NFLDataModule(LightningDataModule):
 
 if __name__ == '__main__':
     import time
-    data_dir = pathlib.Path('../data')
+    data_dir = pathlib.Path(__file__).parents[1] / "data"
     seed_everything(37, True)
     print(data_dir.absolute())
-    dmod = NFLDataModule(data_dir, batch_size=10)
+    dmod = NFLDataModule(data_dir)
     if not (data_dir/"train").exists():
         dmod.prepare_data()
     dmod.setup("train")
