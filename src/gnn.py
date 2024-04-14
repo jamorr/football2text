@@ -158,6 +158,8 @@ def generate_graphs(dl:DataLoader, graph_dir:pathlib.Path):
         # print(ids[0])
         # print(ids[0, 0])
         print(ids.shape)
+        print(tracking.shape)
+
         exit()
         # print(len(batch))
 

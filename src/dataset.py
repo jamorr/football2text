@@ -46,8 +46,8 @@ class NFLDataset(Dataset):
         play_data = play_data[self.id_cols + self.tracking_cols]
         # organize into frames
         framewise_data = np.array([group.values for _, group in play_data.groupby("frameId", as_index=True)])
-        int_cols = framewise_data[:, :6, :].astype(np.int32)  # Contains the first three columns
-        float_cols = framewise_data[:, 6:, :].astype(np.float32)
+        int_cols = framewise_data[:, :, :len(self.id_cols)].astype(np.int32)  # Contains the first three columns
+        float_cols = framewise_data[:, :, len(self.id_cols):].astype(np.float32)
         if self.include_str_types:
             players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
             return int_cols, float_cols, players, target_play
