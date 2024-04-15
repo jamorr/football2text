@@ -93,10 +93,10 @@ if __name__ == '__main__':
     #     start = time.perf_counter()
     #     animate_play_tensor(id_data, tracking_data, play_idx, save_loc,)
     #     print(f"Time per gif: {time.perf_counter()-start:.2f}")
-
+    worker_count = int(0.9 * mp.cpu_count())
     animate_with_saveloc = partial(animate_play_tensor, save_loc=save_loc)
     mp.set_start_method('spawn')
-    with Pool(8) as p:
+    with Pool(worker_count) as p:
         p.map(animate_with_saveloc, dataloader)
 
 
