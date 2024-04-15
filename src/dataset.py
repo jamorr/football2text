@@ -8,6 +8,8 @@ import torch
 from lightning.pytorch import LightningDataModule, seed_everything
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_video
+from towhee import ops
+
 
 
 # TODO: #2 add padding to make stackable outputs/batchsize > 1
@@ -35,9 +37,12 @@ class NFLDataset(Dataset):
     def __getitem__(self, index) -> Any:
         target_play = self.target.iloc[index]
         if self.include_str_types:
-            video, *_ = read_video(self.data_dir/"mp4_data"/f'{target_play["gameId"]}-{target_play["playId"]}.mp4')
-            return video, target_play['playDescription']
+            file_path = self.data_dir/"mp4_data"/f'{target_play["gameId"]}-{target_play["playId"]}.mp4'
+            assert file_path.exists()
+            video, *_ = read_video(str(file_path.absolute()))
 
+            # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
+            return video, target_play['playDescription']
 
         play_data = pd.read_parquet(
             self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}',
@@ -220,6 +225,7 @@ if __name__ == '__main__':
     dmod = NFLDataModule(data_dir)
     if not (data_dir/"train").exists():
         dmod.prepare_data()
+    print("Validating data")
     dmod.setup("train")
     data = dmod.train_dataloader()
     no_missing = 0
