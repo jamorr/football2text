@@ -63,30 +63,19 @@ def get_play_by_frame(fid, ax, los, one_play):
 
 
 def get_play_by_frame_tensor(frame_index, ax, los, tracking_data, id_data):
-    # ax.patches = []
-    # ax.lines = []
-    # ax.texts = []
 
-    # clear current axis (or else you'll have a tracer effect)
     ax.cla()
-
+    colors = ['#747FE3', '#8EE35D', '#E37346']
     # isolates a given frame within one play
     player_positions = tracking_data[
         frame_index, :, :2
     ]  # Assuming the second to last index is players
-    # print(player_positions.shape)
-    # ball_position = tensor_data[
-    #     frame_index, -1, :2
-    # ]  # Assuming the last index is the ball
-    teams = id_data[
-        frame_index, :, 4
-    ]
-    # create a scatter plot, hard coded dot size to 100
-    # print(player_positions[0].shape, player_positions[1].shape, teams.shape)
-    # exit()
-    teams_category = pd.Categorical(teams, np.unique(teams)).astype(str)
-    fig1 = sns.scatterplot(x=player_positions[:, 0], y=player_positions[:, 1], hue=teams_category, ax=ax, s=100)
 
+    teams = id_data[
+        frame_index, :, 3
+    ]
+
+    fig1 = sns.scatterplot(x=player_positions[:, 0], y=player_positions[:, 1], hue=teams, palette=colors, ax=ax, s=100)
     # plots line of scrimmage
     fig1.axvline(los, c="k", ls=":")
 
