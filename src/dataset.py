@@ -113,6 +113,7 @@ class NFLDataModule(LightningDataModule):
 
         tracking_df = pd.DataFrame()
         for file_path in data_dir.glob("tracking_week_*.csv"):
+            print(f"Converting {file_path} into parquet")
             tracking_df = pd.read_csv(file_path, dtype_backend='pyarrow')
             tracking_df['playDirection'] = pd.Categorical(tracking_df['playDirection'], categories=play_direction).codes
             tracking_df['club'] = pd.Categorical(tracking_df['club'],categories=team_names).codes
@@ -120,7 +121,7 @@ class NFLDataModule(LightningDataModule):
             tracking_df.drop(["displayName", "time"], inplace=True, axis='columns')
             tracking_df.fillna(-1, inplace=True)
             tracking_df.to_parquet(self.data_path/"tracking_weeks", partition_cols=["gameId", "playId"])
-
+        print("Creating map parquets from id to name")
         events_to_id_df = pd.DataFrame({'id': range(len(events)), 'category': events})
         events_to_id_df.to_parquet(data_dir/'events_id_map.parquet')
 
@@ -135,8 +136,9 @@ class NFLDataModule(LightningDataModule):
 
         target_df = pd.read_csv(data_dir/'plays.csv', dtype_backend='pyarrow')
         target_df.to_parquet(data_dir/'target.parquet')
-
+        print("Loading full dataset")
         dataset = NFLDataset(self.data_path, False)
+        print("Removing examples with missing tracking data")
         missing_indices = []
         for i in range(len(dataset)):
             try:
@@ -144,6 +146,7 @@ class NFLDataModule(LightningDataModule):
             except FileNotFoundError:
                 missing_indices.append(i)
         missing_dropped_df:pd.DataFrame = dataset.target.drop(missing_indices, axis='rows')
+        print("Splitting dataset into Train/Val/Test")
         msk = np.random.rand(len(missing_dropped_df)) < (train + val)
         train_val_df = missing_dropped_df.iloc[msk]
         val_msk = np.random.rand(len(train_val_df)) < (val / (train + val))
@@ -152,11 +155,13 @@ class NFLDataModule(LightningDataModule):
         val_df:pd.DataFrame =  train_val_df.iloc[val_msk]
         test_df:pd.DataFrame = missing_dropped_df.iloc[~msk]
         del msk, train_val_df, val_msk
-
+        print("Moving data to train folder")
         self._move_files_to_split_directory("train", train_df)
+        print("Moving data to test folder")
         self._move_files_to_split_directory("test", test_df)
+        print("Moving data to val folder")
         self._move_files_to_split_directory("val", val_df)
-
+        print("Deleting all leftover folders")
         shutil.rmtree(self.data_path/"tracking_weeks")
 
 
@@ -212,12 +217,9 @@ if __name__ == '__main__':
     dmod.setup("train")
     data = dmod.train_dataloader()
     no_missing = 0
+    print("Checking that all data in train set can be loaded")
     start = time.perf_counter()
-
     for d in data:
         pass
     print(f" All files read in {time.perf_counter()-start:.2f}s")
-    if no_missing == 0:
-        print("Passed checks")
-    else:
-        print(f"Missing {no_missing} files out of {len(data)}...")
+    print("Passed checks")

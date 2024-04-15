@@ -1,0 +1,14 @@
+name: football
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - lightning
+  - pandas
+  - pyarrow
+  - ipykernel
+  - matplotlib
+  - seaborn
+  - ffmpeg
+  - pytorch
+  - torchvision
