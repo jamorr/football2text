@@ -39,10 +39,10 @@ class NFLDataset(Dataset):
         if self.include_str_types:
             file_path = self.data_dir/"mp4_data"/f'{target_play["gameId"]}-{target_play["playId"]}.mp4'
             assert file_path.exists()
-            video, *_ = read_video(str(file_path.absolute()))
-
+            # video, *_ = read_video(str(file_path.absolute()))
+            video = list(ops.video_decode.ffmpeg()(str(file_path.absolute())))
             # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
-            return video, target_play['playDescription']
+            return target_play['playDescription'], video, torch.ones(len(video))
 
         play_data = pd.read_parquet(
             self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}',

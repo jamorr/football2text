@@ -1,52 +1,79 @@
 import pathlib
-from towhee import pipe,ops,DataCollection
+from collections.abc import Iterable
+from typing import Any
+
 import torchvision
-from towhee.trainer.training_config import dump_default_yaml, TrainingConfig
-from towhee.trainer.trainer import Trainer
 from dataset import NFLDataset
+from torch import Module, nn, optim
+from torch.optim import Optimizer
+from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.dataset import Dataset
+from towhee import DataCollection, ops, pipe
+from towhee.data.dataset.dataset import TorchDataSet, TowheeDataSet
 from towhee.models.clip4clip import CLIP4Clip, create_model
-
-# model = create_model()
-#Takes video file & metadata
-model = CLIP4Clip(**dict(
-        # vision
-        embed_dim=512,
-        image_resolution=224,
-        vision_layers=12,
-        vision_width=768,
-        vision_patch_size=32,
-        # text
-        context_length=77,
-        vocab_size=49408,
-        transformer_width=512,
-        transformer_heads=8,
-        transformer_layers=12
-    ))
-# model = ops.video_text_embedding.clip4clip(model_name='clip_vit_b32', modality='video', device='cpu').get_op()
-# model = (
-#     pipe.input('vid','text')
-#         .map('text', 'tvec', ops.video_text_embedding.clip4clip(model_name='clip_vit_b32', modality='text', device='cuda')) \
-#         # .map('vid', 'vvec', ) \
-#         .output('tvec')
-# )
+from towhee.trainer.modelcard import MODEL_CARD_NAME, ModelCard
+from towhee.trainer.trainer import Trainer
+from towhee.trainer.training_config import TrainingConfig, dump_default_yaml
 
 
-training_config = TrainingConfig(
-    output_dir="../models",
-    epoch_num=2,
-    batch_size=1,
-    print_steps=1,
+class C4CTrainer(Trainer):
+    def __init__(
+        self,
+        model: Module = None,
+        training_config: TrainingConfig = None,
+        train_dataset: Dataset | TowheeDataSet = None,
+        eval_dataset: Dataset | TowheeDataSet = None,
+        train_dataloader: DataLoader | Iterable = None,
+        eval_dataloader: DataLoader | Iterable = None,
+        model_card: ModelCard = None,
+    ):
+        super().__init__(
+            model,
+            training_config,
+            train_dataset,
+            eval_dataset,
+            train_dataloader,
+            eval_dataloader,
+            model_card,
+        )
+    def compute_loss(self, model: nn.Module, inputs: Any):
+        self.set_train_mode(model)
+        loss = model(*inputs)
+        return loss
 
-)
+
 
 if __name__ == "__main__":
+    model = CLIP4Clip(
+        **dict(
+            # vision
+            embed_dim=512,
+            image_resolution=224,
+            vision_layers=12,
+            vision_width=768,
+            vision_patch_size=32,
+            # text
+            context_length=77,
+            vocab_size=49408,
+            transformer_width=512,
+            transformer_heads=8,
+            transformer_layers=12,
+        )
+    )
     which = "train"
     data_dir = pathlib.Path(__file__).parents[1] / "data"
-    train_data = NFLDataset(data_dir/which,True)
+    train_data = NFLDataset(data_dir / which, True)
     which = "val"
-    eval_data = NFLDataset(data_dir/which,True)
-
-    trainer = Trainer(model, training_config, train_dataset=train_data, eval_dataset=eval_data)
+    eval_data = NFLDataset(data_dir / which, True)
+    training_config = TrainingConfig(
+        output_dir="../models",
+        epoch_num=2,
+        batch_size=1,
+        print_steps=1,
+    )
+    trainer = C4CTrainer(
+        model, training_config, train_dataset=train_data, eval_dataset=eval_data
+    )
     # data_dir = pathlib.Path(__file__).parents[1] / "data" / "val"
     # dset = NFLDataset(data_dir, True)
 
