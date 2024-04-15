@@ -82,7 +82,7 @@ if __name__ == '__main__':
     import pathlib
     which = "val"
     data_dir = pathlib.Path(__file__).parents[1]/"data"
-    save_loc = data_dir/which/"gifs"
+    save_loc = data_dir/which/"mp4_data"
     team_names = pd.read_parquet(data_dir/which/"team_id_map.parquet")
     if not save_loc.exists():
         save_loc.mkdir()
