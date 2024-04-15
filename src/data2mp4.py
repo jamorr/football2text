@@ -44,6 +44,8 @@ def animate_play_tensor(dataloader_input, save_loc):
         ax.axvline(los, c="k", ls=":")
 
         # plots a simple end zone
+        for i in range(2, 10):
+            ax.axvlin(i*10, c="b", ls="-")
         ax.axvline(10, c="k", ls="-")
         ax.axvline(110, c="k", ls="-")
 
@@ -52,13 +54,18 @@ def animate_play_tensor(dataloader_input, save_loc):
         ax.legend([]).set_visible(False)
 
         # takes out the left, top, and right borders on the graph
-        sns.despine(left=True, bottom=True)
+        sns.despine(left=True, bottom=True, right=True, top=True)
+
 
         # no y axis label
         ax.set_ylabel("")
 
         # no y axis tick marks
         ax.set_yticks([])
+        # no x axis label
+        ax.set_xlabel("")
+        # no x axis tick marks
+        ax.set_xticks([])
 
         # set the x and y graph limits to the entire field (from kaggle BDB page)
         ax.set_xlim(0, 120)
@@ -74,7 +81,6 @@ def animate_play_tensor(dataloader_input, save_loc):
         start = time.perf_counter()
         ani.save(save_loc/f"{gidx}-{pidx}.mp4", writer=animation.FFMpegWriter(fps=10, codec='h264'))
         print(f"Time to write image: {time.perf_counter() - start:.2f}")
-# import matplotlib
 
 
 if __name__ == '__main__':

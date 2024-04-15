@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from lightning.pytorch import LightningDataModule, seed_everything
 from torch.utils.data import DataLoader, Dataset
-
+from torchvision.io import read_video
 
 
 # TODO: #2 add padding to make stackable outputs/batchsize > 1
@@ -17,6 +17,7 @@ class NFLDataset(Dataset):
         super().__init__()
         assert data_path.exists()
         self.include_str_types = include_str_types
+        self.data_dir = data_path
         self.play_dir = data_path/'tracking_weeks'
 
         self.target = pd.read_parquet(data_path/'target.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
@@ -33,6 +34,11 @@ class NFLDataset(Dataset):
 
     def __getitem__(self, index) -> Any:
         target_play = self.target.iloc[index]
+        if self.include_str_types:
+            video, *_ = read_video(self.data_dir/"mp4_data"/f'{target_play["gameId"]}-{target_play["playId"]}.mp4')
+            return video, target_play['playDescription']
+
+
         play_data = pd.read_parquet(
             self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}',
             dtype_backend='numpy_nullable',
@@ -49,9 +55,9 @@ class NFLDataset(Dataset):
         framewise_data = np.array([group.values for _, group in play_data.groupby("frameId", as_index=True)])
         int_cols = framewise_data[:, :, :len(self.id_cols)].astype(np.int32)  # Contains the first three columns
         float_cols = framewise_data[:, :, len(self.id_cols):].astype(np.float32)
-        if self.include_str_types:
-            players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
-            return int_cols, float_cols, players, target_play
+        # if self.include_str_types:
+        #     players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
+        #     return int_cols, float_cols, players, target_play
         return int_cols, float_cols, torch.tensor((target_play["gameId"], target_play["playId"]), dtype=torch.int32)
 
 
