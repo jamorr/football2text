@@ -77,33 +77,29 @@ def generate_graph(
     # twd_all = _get_time_windows(list_fts, args.time_span)
     twd_all = []
     for i in range(0, id_data.shape[3], time_span):
-        twd_all.append(((i, i+time_span), id_data[:,:,:,i:i+time_span], tracking_data[:,:,:,i:i+time_span]))
+        twd_all.append((tuple(range(i, i+time_span)), id_data[:,:,:,i:i+time_span], tracking_data[:,:,:,i:i+time_span]))
 
     # Iterate over every time window
     num_graph = 0
-    for twd in twd_all:
+    for frames, ids, track in twd_all:
+
         # Skip the training graphs without any temporal edges
-        if twd[0].shape[3] == 1:
+        if ids.shape[1] == 1:
             continue
 
         # Get lists of the timestamps, features, coordinates, labels, person_ids, and global_ids for a given time window
 
         timestamp, feature, coord, label, person_id, global_id = [], [], [], [], [], []
 
-        for ts, ids, tracking in twd:
-            np.unique(ids[0])
-            for entity in data[f"{fts:g}"]:
-                timestamp.append(fts)
-                feature.append(entity["feature"])
-                x1, y1, x2, y2 = [float(c) for c in entity["person_box"].split(",")]
-                coord.append(
-                    np.array(
-                        [(x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1],
-                        dtype=np.float32,
-                    )
-                )
-                label.append(entity["label"])
-                person_id.append(entity["person_id"])
+        for ts, id, tr in (zip(frames, ids, track)):
+            timestamp.append(ts)
+            for entity in np.unique(ids[0, 0]):
+
+                player_data = tr[:, (id[0, :, 0] == entity), :]
+                feature.append()
+                coord.append(player_data)
+                # label.append(entity["label"])
+                person_id.append(entity)
                 global_id.append(entity["global_id"])
 
         # Get a list of the edge information: these are for edge_index and edge_attr
@@ -152,13 +148,11 @@ def generate_graph(
 
     return num_graph
 
-def generate_graphs(dl:DataLoader, graph_dir:pathlib.Path):
+def generate_graphs(dl:DataLoader, graph_dir:pathlib.Path, time_span:int = 5):
     start = time.perf_counter()
+
     for ids, tracking in dl:
-        # print(ids[0])
-        # print(ids[0, 0])
-        print(ids.shape)
-        print(tracking.shape)
+        generate_graph(ids, tracking, time_span)
 
         exit()
         # print(len(batch))
@@ -175,7 +169,7 @@ if __name__ == "__main__":
     data_dir = pathlib.Path(__file__).parents[1] / "data"
     print(data_dir)
     graph_dir = data_dir/"graphs"
-    dmod = NFLDataModule(data_dir)
+    dmod = NFLDataModule(data_dir, include_str_types=True)
     dmod.setup('val')
     dl = dmod.val_dataloader()
     if not graph_dir.exists():

@@ -61,7 +61,6 @@ class NFLDataModule(LightningDataModule):
         self,
         data_path:pathlib.Path=pathlib.Path('../data'),
         splits:tuple[float, float, float]=(0.75, 0.05, 0.2),
-        include_str_types:bool = False,
         **loader_args
 
         ):
@@ -69,7 +68,7 @@ class NFLDataModule(LightningDataModule):
         self.data_path:pathlib.Path = data_path
         self.splits = splits
         self.loader_args = loader_args
-        self.include_str_types = include_str_types
+        self.include_str_types = False
 
 
     def prepare_data(self) -> None:
