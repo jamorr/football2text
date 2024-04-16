@@ -12,7 +12,6 @@ from towhee import ops
 from towhee.models.clip.clip_utils import tokenize
 
 
-
 # TODO: #2 add padding to make stackable outputs/batchsize > 1
 # TODO: #1 preprocess text into token ids
 class NFLDataset(Dataset):
@@ -43,7 +42,10 @@ class NFLDataset(Dataset):
             # video, *_ = read_video(str(file_path.absolute()))
             video = list(ops.video_decode.ffmpeg()(str(file_path.absolute())))
             # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
-            return tokenize(target_play['playDescription']), video, torch.ones(len(video))
+            token = tokenize(target_play['playDescription'])
+            # print(video , len(video), video[0].shape)
+            return token, video, torch.ones(len(video))
+            # return ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription']), video, torch.ones(len(video))
 
         play_data = pd.read_parquet(
             self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}',
