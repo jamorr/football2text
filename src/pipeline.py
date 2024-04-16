@@ -15,7 +15,6 @@ from towhee.trainer.modelcard import MODEL_CARD_NAME, ModelCard
 from towhee.trainer.trainer import Trainer
 from towhee.trainer.training_config import TrainingConfig, dump_default_yaml
 
-
 class C4CTrainer(Trainer):
     def __init__(
         self,

@@ -9,6 +9,7 @@ from lightning.pytorch import LightningDataModule, seed_everything
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_video
 from towhee import ops
+from towhee.models.clip.clip_utils import tokenize
 
 
 
@@ -42,7 +43,7 @@ class NFLDataset(Dataset):
             # video, *_ = read_video(str(file_path.absolute()))
             video = list(ops.video_decode.ffmpeg()(str(file_path.absolute())))
             # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
-            return ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription']), video, torch.ones(len(video))
+            return tokenize(target_play['playDescription']), video, torch.ones(len(video))
 
         play_data = pd.read_parquet(
             self.play_dir/f'gameId={target_play["gameId"]}'/f'playId={target_play["playId"]}',
