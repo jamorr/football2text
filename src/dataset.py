@@ -50,8 +50,8 @@ class NFLDataset(Dataset):
             columns=['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event', 'x', 'y', 's', 'a', 'dis', 'o', 'dir']
         )
         # id columns
-
         play_data[self.id_cols] = play_data[self.id_cols].astype(np.int32)
+
         # tracking data columns
         play_data[self.tracking_cols] = play_data[self.tracking_cols].astype(np.float32)
         play_data = play_data[self.id_cols + self.tracking_cols]
@@ -63,7 +63,7 @@ class NFLDataset(Dataset):
         # if self.include_str_types:
         #     players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
         #     return int_cols, float_cols, players, target_play
-        return int_cols, float_cols, torch.tensor((target_play["gameId"], target_play["playId"]), dtype=torch.int32)
+        return int_cols, float_cols, torch.tensor((target_play["gameId"], target_play["playId"]), dtype=torch.int32), play_data.absoluteYardlineNumber, play_data.yardsToGo
 
 
 class NFLDataModule(LightningDataModule):
