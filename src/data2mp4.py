@@ -1,6 +1,7 @@
 from functools import partial
 import io
 import time
+import torch
 from torchvision.transforms.functional import pil_to_tensor
 import warnings
 from PIL import Image
@@ -94,21 +95,21 @@ def animate_play_tensor(dataloader_input, save_loc):
         fig, ax = plt.subplots(figsize=(14.4, 6.4), layout="constrained")
         # colors = ['#ff5733', '#ffbd33', '#dbff33']
         ax:matplotlib.axes.Axes
-        teams = id_data[
+        teams:torch.Tensor = id_data[
             0, :, 3
         ]
-        unique_teams = np.unique(teams, return_index=True)
-        t1_num = teams[unique_teams[0]]
-        t2_num = teams[unique_teams[1]]
+        _, unique_teams = np.unique(teams, return_index=True)
+        unique_teams = list(sorted(unique_teams))
+        t1_num = int(teams[unique_teams[0]])
+        t2_num = int(teams[unique_teams[1]])
         football = -1
         if t1_num == football:
-            t1_num, t2_num = t2_num, teams[unique_teams[2]]
+            t1_num, t2_num = t2_num, int(teams[unique_teams[2]])
         elif t2_num == football:
-            t2_num = teams[unique_teams[2]]
+            t2_num = int(teams[unique_teams[2]])
         unique_teams = (t1_num, t2_num, football)
 
         colors = ColorPairs(TEAM_MAP[t1_num], TEAM_MAP[t2_num])
-        colors
         team_plots = []
         for i in range(3):
             face_c, edge_c = colors[TEAM_MAP[unique_teams[i]]]
@@ -118,7 +119,9 @@ def animate_play_tensor(dataloader_input, save_loc):
         # los = tracking_data[0, los_msk, 0]
 
         ax.axvline(los, c="k", ls=":")
-        first_down_line = los+((-1**tracking_data[0,0,4])*ytf)
+        # print(id_data[0,:,4])
+        # print(int(id_data[0,0,4]),((-1)**int(id_data[0,0,4])), ytf*(-1**int(id_data[0,0,4])))
+        first_down_line = los+(((-1)**int(id_data[0,0,4])*(-ytf)))
         ax.axvline(first_down_line, c="y", ls="-")
         # plots a simple end zone
         for i in range(2, 11):
@@ -178,10 +181,14 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
 
 
+    print("Starting MP4 creation...")
     start = time.perf_counter()
-
-    with Pool(worker_count) as p:
-        p.map(animate_with_saveloc, dataloader)
+    for i, data in enumerate(dataloader):
+        animate_with_saveloc(data)
+        if i == 3:
+            break
+    # with Pool(worker_count) as p:
+    #     p.map(animate_with_saveloc, dataloader)
 
     print(f"Time to write images: {time.perf_counter() - start:.2f}")
 
