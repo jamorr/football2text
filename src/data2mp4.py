@@ -183,12 +183,12 @@ if __name__ == '__main__':
 
     print("Starting MP4 creation...")
     start = time.perf_counter()
-    for i, data in enumerate(dataloader):
-        animate_with_saveloc(data)
-        if i == 3:
-            break
-    # with Pool(worker_count) as p:
-    #     p.map(animate_with_saveloc, dataloader)
+    # for i, data in enumerate(dataloader):
+    #     animate_with_saveloc(data)
+    #     if i == 3:
+    #         break
+    with Pool(worker_count) as p:
+        p.map(animate_with_saveloc, dataloader)
 
     print(f"Time to write images: {time.perf_counter() - start:.2f}")
 
