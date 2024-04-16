@@ -2,6 +2,7 @@ import pathlib
 from collections.abc import Iterable
 from typing import Any
 
+import torch
 import torchvision
 from dataset import NFLDataset
 from torch.nn import Module
@@ -16,6 +17,9 @@ from towhee.models.clip4clip import CLIP4Clip, create_model
 from towhee.trainer.modelcard import MODEL_CARD_NAME, ModelCard
 from towhee.trainer.trainer import Trainer
 from towhee.trainer.training_config import TrainingConfig, dump_default_yaml
+from towhee.trainer.utils.trainer_utils import STATE_CHECKPOINT_NAME, MODEL_NAME, set_seed, reduce_value, \
+    is_main_process, send_to_device, unwrap_model, _construct_loss_from_config, _construct_optimizer_from_config, \
+    _construct_scheduler_from_config
 
 
 import os
@@ -42,8 +46,39 @@ class C4CTrainer(Trainer):
         )
     def compute_loss(self, model: nn.Module, inputs: Any):
         self.set_train_mode(model)
-        loss = model(*inputs)
+        print(inputs)
+        loss = model.forward(*inputs)
+        # print(loss)
         return loss
+    
+    
+    @torch.no_grad()
+    def compute_metric(self, model: nn.Module, inputs: Any) -> float:
+        """
+        Compute the step metric.
+        It is recommended to subclass `Trainer` and override this method when deal with custom metric in custom task.
+        When it is overridden, another method `compute_loss()` often needs to be overridden.
+
+        Args:
+            model (`nn.Module`):
+                Pytorch model.
+            inputs (`Any`):
+                Input tensor collection.
+
+        Returns:
+            (`float`)
+                Epoch average metric.
+        """
+        return 0
+        model.eval()
+        epoch_metric = None
+        labels = inputs[1]
+        outputs = model(*inputs)
+        if self.metric is not None:
+            self.metric.update(send_to_device(outputs, self.configs.device),
+                               send_to_device(labels, self.configs.device))
+            epoch_metric = self.metric.compute().item()
+        return epoch_metric
 
 
 
@@ -81,8 +116,8 @@ if __name__ == "__main__":
     # data_dir = pathlib.Path(__file__).parents[1] / "data" / "val"
     # dset = NFLDataset(data_dir, True)
 
-    # trainer.train()
+    trainer.train()
     # print(ops.video_text_embedding.clip4clip(model_name='clip_vit_b32', modality='text')())
     # train_data[0][0]
-    for i in range(len(train_data))[:1]:
-        print(train_data[i][0])
+    # for i in range(len(train_data))[:1]:
+        # print(train_data[i][0])

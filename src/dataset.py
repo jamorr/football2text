@@ -1,6 +1,7 @@
 import pathlib
 import shutil
 from typing import Any
+from PIL import Image as PILImage
 
 import numpy as np
 import pandas as pd
@@ -10,6 +11,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_video
 from towhee import ops
 from towhee.models.clip.clip_utils import tokenize
+from torchvision import transforms
 
 
 # TODO: #2 add padding to make stackable outputs/batchsize > 1
@@ -30,7 +32,13 @@ class NFLDataset(Dataset):
         # self.teams = pd.read_parquet(data_path/'team_id_map.parquet', dtype_backend='numpy_nullable')
         # self.directions = pd.read_parquet(data_path/'direction_id_map.parquet', dtype_backend='numpy_nullable')
         # self.events = pd.read_parquet(data_path/'events_id_map.parquet', dtype_backend='numpy_nullable')
-
+        self.tfms = transforms.Compose([
+            transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
+        ])
     def __len__(self):
         return len(self.target)
 
@@ -40,11 +48,24 @@ class NFLDataset(Dataset):
             file_path = self.data_dir/"mp4_data"/f'{target_play["gameId"]}-{target_play["playId"]}.mp4'
             assert file_path.exists()
             # video, *_ = read_video(str(file_path.absolute()))
-            video = list(ops.video_decode.ffmpeg()(str(file_path.absolute())))
+            img_list = list(ops.video_decode.ffmpeg()(str(file_path.absolute())))[:12]
             # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
             token = tokenize(target_play['playDescription'])
-            # print(video , len(video), video[0].shape)
-            return token, video, torch.ones(len(video))
+            # print(len(video), video[0].shape)
+            
+            max_frames = 12
+            video = np.zeros((1, max_frames, 1, 3, 224, 224), dtype=np.float64)
+            slice_len = len(img_list)
+            max_video_length = 0 if 0 > slice_len else slice_len
+            for i, img in enumerate(img_list):
+                pil_img = PILImage.fromarray(img, "RGB")
+                tfmed_img = self.tfms(pil_img).unsqueeze(0)
+                if slice_len >= 1:
+                    video[0, i, ...] = tfmed_img.cpu().numpy()
+            video_mask = np.zeros((1, max_frames), dtype=np.int32)
+            video_mask[0, :max_video_length] = [1] * max_video_length
+            
+            return token, video, video_mask
             # return ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription']), video, torch.ones(len(video))
 
         play_data = pd.read_parquet(
