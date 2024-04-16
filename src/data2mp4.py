@@ -90,11 +90,36 @@ def ColorPairs(team1, team2):
         }
 
 
-def get_play_by_frame_tensor(idx, team_plots, unique_teams, id_data, tracking_data):
+def get_play_by_frame_tensor(idx, team_plots, unique_teams, id_data, tracking_data, ax):
     ids, tracks = id_data[idx], tracking_data[idx]
     for scat, team in zip(team_plots, unique_teams):
-        scat.set_offsets(tracks[(ids[:, 3] == team), :2])
+        loc_data = tracks[(ids[:, 3] == team), :2]
+        scat.set_offsets(loc_data)
+    else:
+        # center the view on the football
+        ax.set_xlim(loc_data[0,0]-26.65, loc_data[0,0]+26.65)
+
     return team_plots
+
+
+def get_teams_colors(ax, teams):
+    _, unique_teams = np.unique(teams, return_index=True)
+    unique_teams = list(sorted(unique_teams))
+    t1_num = int(teams[unique_teams[0]])
+    t2_num = int(teams[unique_teams[1]])
+    football = -1
+    if t1_num == football:
+        t1_num, t2_num = t2_num, int(teams[unique_teams[2]])
+    elif t2_num == football:
+        t2_num = int(teams[unique_teams[2]])
+    unique_teams = (t1_num, t2_num, football)
+
+    colors = ColorPairs(TEAM_MAP[t1_num], TEAM_MAP[t2_num])
+    team_plots = []
+    for i in range(3):
+        face_c, edge_c = colors[TEAM_MAP[unique_teams[i]]]
+        team_plots.append(ax.scatter([], [], s=40, c=face_c, edgecolors=edge_c))
+    return unique_teams,team_plots
 
 
 def animate_play_tensor(dataloader_input, save_loc):
@@ -104,60 +129,40 @@ def animate_play_tensor(dataloader_input, save_loc):
     ):
         gidx, pidx = idxs
         # Set up the figure for animation
-        fig, ax = plt.subplots(figsize=(14.4, 6.4), layout="constrained")
+        fig, ax = plt.subplots(
+            # figsize=(14.4, 6.4),
+            figsize=(2.24, 2.24),
+            layout="constrained")
+        # fig.set_figwidth(224)
+        # fig.set_figheight(224)
         # colors = ['#ff5733', '#ffbd33', '#dbff33']
         ax: matplotlib.axes.Axes
         teams: torch.Tensor = id_data[0, :, 3]
-        _, unique_teams = np.unique(teams, return_index=True)
-        unique_teams = list(sorted(unique_teams))
-        t1_num = int(teams[unique_teams[0]])
-        t2_num = int(teams[unique_teams[1]])
-        football = -1
-        if t1_num == football:
-            t1_num, t2_num = t2_num, int(teams[unique_teams[2]])
-        elif t2_num == football:
-            t2_num = int(teams[unique_teams[2]])
-        unique_teams = (t1_num, t2_num, football)
+        unique_teams, team_plots = get_teams_colors(ax, teams)
 
-        colors = ColorPairs(TEAM_MAP[t1_num], TEAM_MAP[t2_num])
-        team_plots = []
-        for i in range(3):
-            face_c, edge_c = colors[TEAM_MAP[unique_teams[i]]]
-            team_plots.append(ax.scatter([], [], s=100, c=face_c, edgecolors=edge_c))
+        # ball_start_msk = (id_data[0, :, 0] == -1)
+        # ball_start_pos = tracking_data[0, ball_start_msk, 0]
 
-        # los_msk = (id_data[0, :, 0] == -1)
-        # los = tracking_data[0, los_msk, 0]
-
-        ax.axvline(los, c="k", ls=":")
-        # print(id_data[0,:,4])
-        # print(int(id_data[0,0,4]),((-1)**int(id_data[0,0,4])), ytf*(-1**int(id_data[0,0,4])))
         first_down_line = los + ((-1) ** int(id_data[0, 0, 4]) * (-ytf))
         ax.axvline(first_down_line, c="y", ls="-")
-        # plots a simple end zone
+        # plots every 10 yards
         for i in range(2, 11):
             ax.axvline(i * 10, c="b", ls=(5, (11 - i, i)), alpha=0.35)
             ax.axvline(i * 10, c="r", ls=(5, (i, 11 - i)), alpha=0.35)
         ax.axvline(10, c="k", ls="-")
         ax.axvline(110, c="k", ls="-")
-
-        # takes out the legend (if you leave this, you'll get an annoying legend)
+        # plot line of scrimmage
+        ax.axvline(los, c="k", ls=":")
+        # remove plot box, legend, splines etc
         ax.legend([]).set_visible(False)
-
-        # takes out the left, top, and right borders on the graph
         sns.despine(left=True, bottom=True, right=True, top=True)
-
-        # no y axis label
         ax.set_ylabel("")
-
-        # no y axis tick marks
         ax.set_yticks([])
-        # no x axis label
         ax.set_xlabel("")
-        # no x axis tick marks
         ax.set_xticks([])
 
-        # set the x and y graph limits to the entire field (from kaggle BDB page)
-        ax.set_xlim(0, 120)
+        # set the x and y graph limits to a square image around the line of scrimmage
+        ax.set_xlim(los-26.65, los+26.65)
         ax.set_ylim(0, 53.3)
 
         ani = animation.FuncAnimation(
@@ -167,7 +172,7 @@ def animate_play_tensor(dataloader_input, save_loc):
             interval=1,
             repeat=False,
             blit=True,
-            fargs=(team_plots, unique_teams, id_data, tracking_data),
+            fargs=(team_plots, unique_teams, id_data, tracking_data, ax),
         )
         plt.close()
         ani.save(
@@ -189,20 +194,19 @@ if __name__ == "__main__":
     dmod = NFLDataModule(data_dir)
     dmod.setup(which)
     dataloader = dmod.val_dataloader()
-    # for i, (id_data, tracking_data, play_idx) in enumerate(dataloader):
-    #     start = time.perf_counter()
-    #     animate_play_tensor(id_data, tracking_data, play_idx, save_loc,)
-    #     print(f"Time per gif: {time.perf_counter()-start:.2f}")
-    worker_count = int(0.9 * mp.cpu_count())
     animate_with_saveloc = partial(animate_play_tensor, save_loc=save_loc)
-    mp.set_start_method("spawn")
-
     print("Starting MP4 creation...")
+
     start = time.perf_counter()
     # for i, data in enumerate(dataloader):
     #     animate_with_saveloc(data)
     #     if i == 3:
-    #         break
+    #         print(f"Time to write images: {time.perf_counter() - start:.2f}")
+    #         exit()
+
+    worker_count = int(0.9 * mp.cpu_count())
+    mp.set_start_method("spawn")
+
     with Pool(worker_count) as p:
         p.map(animate_with_saveloc, dataloader)
 
