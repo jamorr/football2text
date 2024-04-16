@@ -103,7 +103,9 @@ def get_play_by_frame_tensor(idx, team_plots, unique_teams, id_data, tracking_da
 
 
 def get_teams_colors(ax, teams):
+
     _, unique_teams = np.unique(teams, return_index=True)
+    assert len(unique_teams) == 3
     unique_teams = list(sorted(unique_teams))
     t1_num = int(teams[unique_teams[0]])
     t2_num = int(teams[unique_teams[1]])
@@ -119,7 +121,7 @@ def get_teams_colors(ax, teams):
     for i in range(3):
         face_c, edge_c = colors[TEAM_MAP[unique_teams[i]]]
         team_plots.append(ax.scatter([], [], s=40, c=face_c, edgecolors=edge_c))
-    return unique_teams,team_plots
+    return unique_teams, team_plots
 
 
 def animate_play_tensor(dataloader_input, save_loc):
@@ -138,7 +140,11 @@ def animate_play_tensor(dataloader_input, save_loc):
         # colors = ['#ff5733', '#ffbd33', '#dbff33']
         ax: matplotlib.axes.Axes
         teams: torch.Tensor = id_data[0, :, 3]
-        unique_teams, team_plots = get_teams_colors(ax, teams)
+        try:
+            unique_teams, team_plots = get_teams_colors(ax, teams)
+        except AssertionError:
+            print(f"Game - {gidx}, Play - {pidx} contains fewer than 3 teams in frame 0")
+            return
 
         # ball_start_msk = (id_data[0, :, 0] == -1)
         # ball_start_pos = tracking_data[0, ball_start_msk, 0]
