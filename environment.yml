@@ -2,13 +2,17 @@ name: football
 channels:
   - defaults
 dependencies:
-  - python=3.12
+  - ffmpeg
+  - ipykernel
   - lightning
+  - matplotlib
   - pandas
   - pyarrow
-  - ipykernel
-  - matplotlib
-  - seaborn
-  - ffmpeg
+  - python=3.11
   - pytorch
+  - seaborn
   - torchvision
+  - torchmetrics=0.7.0
+  - av
+  - pytorch-cuda=12.1
+  - torchaudio
