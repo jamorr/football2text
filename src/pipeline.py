@@ -4,7 +4,9 @@ from typing import Any
 
 import torchvision
 from dataset import NFLDataset
-from torch import Module, nn, optim
+from torch.nn import Module
+import torch.nn as nn
+import torch.optim as optim
 from torch.optim import Optimizer
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
@@ -16,6 +18,8 @@ from towhee.trainer.trainer import Trainer
 from towhee.trainer.training_config import TrainingConfig, dump_default_yaml
 
 
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 class C4CTrainer(Trainer):
     def __init__(
         self,
@@ -77,6 +81,8 @@ if __name__ == "__main__":
     # data_dir = pathlib.Path(__file__).parents[1] / "data" / "val"
     # dset = NFLDataset(data_dir, True)
 
-    trainer.train()
-    # for i in range(len(dset))[:10]:
-    #     model(dset[i][0])
+    # trainer.train()
+    # print(ops.video_text_embedding.clip4clip(model_name='clip_vit_b32', modality='text')())
+    # train_data[0][0]
+    for i in range(len(train_data))[:1]:
+        print(train_data[i][0])
