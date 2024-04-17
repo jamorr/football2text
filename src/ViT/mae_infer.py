@@ -65,7 +65,7 @@ def main():
     models_dir = root_dir / "models"
     vis_save_dir = root_dir / "assets" / "ViT_examples"
     which = "test"
-    vit_ver = "2/checkpoint-5922"
+    vit_ver = '2/checkpoint-7896'
     vit_pretrained = ViTMAEForPreTraining.from_pretrained(models_dir / "ViT" / vit_ver,)
     image_processor = ViTImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver,)
     global imagenet_mean, imagenet_std
