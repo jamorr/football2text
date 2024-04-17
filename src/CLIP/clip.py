@@ -38,6 +38,5 @@ def main():
     Trainer(clip_model, train_dataset)
 
 
-# image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
 if __name__ == "__main__":
     main()
