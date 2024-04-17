@@ -24,6 +24,7 @@ import torch
 from datasets import load_dataset
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
 from torchvision.transforms.functional import InterpolationMode
+from dataset import NFLImageDataset, NFLJPEGDataset
 
 import transformers
 from transformers import (
@@ -37,6 +38,8 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 """ Pre-training a 🤗 ViT model as an MAE (masked autoencoder), as proposed in https://arxiv.org/abs/2111.06377."""
@@ -59,7 +62,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="/home/jackmorris/football/football2text/data/jpeg_data", metadata={"help": "Name of a dataset from the datasets package"}
+        default="nateraw/image-folder", metadata={"help": "Name of a dataset from the datasets package"}
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
@@ -162,11 +165,12 @@ class CustomTrainingArguments(TrainingArguments):
     base_learning_rate: float = field(
         default=1e-3, metadata={"help": "Base learning rate: absolute_lr = base_lr * total_batch_size / 256."}
     )
+    # device:str = field(
+    #     default='cuda:1', metadata={"help": "Device(s) to use in training"}
+    # )
 
 
-def collate_fn(examples):
-    pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    return {"pixel_values": pixel_values}
+
 
 
 def main():
@@ -234,21 +238,21 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
-    # Initialize our dataset.
-    ds = load_dataset(
-        data_args.dataset_name,
-        data_args.dataset_config_name,
-        data_files=data_args.data_files,
-        cache_dir=model_args.cache_dir,
-        token=model_args.token,
-    )
+    # # Initialize our dataset.
+    # ds = load_dataset(
+    #     data_args.dataset_name,
+    #     data_args.dataset_config_name,
+    #     data_files=data_args.data_files,
+    #     cache_dir=model_args.cache_dir,
+    #     token=model_args.token,
+    # )
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
-    if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
-        split = ds["train"].train_test_split(data_args.train_val_split)
-        ds["train"] = split["train"]
-        ds["validation"] = split["test"]
+    # data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
+    # if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
+    #     split = ds["train"].train_test_split(data_args.train_val_split)
+    #     ds["train"] = split["train"]
+    #     ds["validation"] = split["test"]
 
     # Load pretrained model and image processor
     #
@@ -302,10 +306,10 @@ def main():
         logger.info("Training new model from scratch")
         model = ViTMAEForPreTraining(config)
 
-    if training_args.do_train:
-        column_names = ds["train"].column_names
-    else:
-        column_names = ds["validation"].column_names
+    # if training_args.do_train:
+    #     column_names = ds["train"].column_names
+    # else:
+    #     column_names = ds["validation"].column_names
 
     if data_args.image_column_name is not None:
         image_column_name = data_args.image_column_name
@@ -335,26 +339,32 @@ def main():
     def preprocess_images(examples):
         """Preprocess a batch of images by applying transforms."""
 
-        examples["pixel_values"] = [transforms(image) for image in examples[image_column_name]]
+        examples = [transforms(image) for image in examples]
         return examples
 
-    if training_args.do_train:
-        if "train" not in ds:
-            raise ValueError("--do_train requires a train dataset")
-        if data_args.max_train_samples is not None:
-            ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
-        # Set the training transforms
-        ds["train"].set_transform(preprocess_images)
 
-    if training_args.do_eval:
-        if "validation" not in ds:
-            raise ValueError("--do_eval requires a validation dataset")
-        if data_args.max_eval_samples is not None:
-            ds["validation"] = (
-                ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
-            )
-        # Set the validation transforms
-        ds["validation"].set_transform(preprocess_images)
+    def collate_fn(examples):
+        examples = preprocess_images(examples)
+        pixel_values = torch.stack([example for example in examples])
+        return {"pixel_values": pixel_values}
+
+    # if training_args.do_train:
+    #     if "train" not in ds:
+    #         raise ValueError("--do_train requires a train dataset")
+    #     if data_args.max_train_samples is not None:
+    #         ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+    #     # Set the training transforms
+    #     ds["train"].set_transform(preprocess_images)
+
+    # if training_args.do_eval:
+    #     if "validation" not in ds:
+    #         raise ValueError("--do_eval requires a validation dataset")
+    #     if data_args.max_eval_samples is not None:
+    #         ds["validation"] = (
+    #             ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+    #         )
+    #     # Set the validation transforms
+    #     ds["validation"].set_transform(preprocess_images)
 
     # Compute absolute learning rate
     total_train_batch_size = (
@@ -362,16 +372,24 @@ def main():
     )
     if training_args.base_learning_rate is not None:
         training_args.learning_rate = training_args.base_learning_rate * total_train_batch_size / 256
-
     # Initialize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=ds["train"] if training_args.do_train else None,
-        eval_dataset=ds["validation"] if training_args.do_eval else None,
+        train_dataset=NFLImageDataset("/home/jackmorris/football/football2text/data/train"),
+        eval_dataset=NFLImageDataset("/home/jackmorris/football/football2text/data/val"),
         tokenizer=image_processor,
         data_collator=collate_fn,
     )
+    # trainer = Trainer(
+    #     model=model,
+    #     args=training_args,
+    #     train_dataset=NFLJPEGDataset("/home/jackmorris/football/football2text/data/train"),
+    #     eval_dataset=NFLJPEGDataset("/home/jackmorris/football/football2text/data/val"),
+    #     tokenizer=image_processor,
+    #     data_collator=collate_fn,
+    # )
+
 
     # Training
     if training_args.do_train:
