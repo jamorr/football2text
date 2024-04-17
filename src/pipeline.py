@@ -20,10 +20,11 @@ from towhee.trainer.training_config import TrainingConfig, dump_default_yaml
 from towhee.trainer.utils.trainer_utils import STATE_CHECKPOINT_NAME, MODEL_NAME, set_seed, reduce_value, \
     is_main_process, send_to_device, unwrap_model, _construct_loss_from_config, _construct_optimizer_from_config, \
     _construct_scheduler_from_config
-
+from towhee.models import clip4clip
+from towhee.models.clip4clip.until_module import PreTrainedModel
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 class C4CTrainer(Trainer):
     def __init__(
         self,
@@ -46,7 +47,7 @@ class C4CTrainer(Trainer):
         )
     def compute_loss(self, model: nn.Module, inputs: Any):
         self.set_train_mode(model)
-        print(inputs)
+        # print(inputs)
         loss = model.forward(*inputs)
         # print(loss)
         return loss
@@ -69,7 +70,7 @@ class C4CTrainer(Trainer):
             (`float`)
                 Epoch average metric.
         """
-        return 0
+        return 1
         model.eval()
         epoch_metric = None
         labels = inputs[1]
@@ -83,22 +84,28 @@ class C4CTrainer(Trainer):
 
 
 if __name__ == "__main__":
-    model = CLIP4Clip(
-        **dict(
-            # vision
-            embed_dim=512,
-            image_resolution=224,
-            vision_layers=12,
-            vision_width=768,
-            vision_patch_size=32,
-            # text
-            context_length=77,
-            vocab_size=49408,
-            transformer_width=512,
-            transformer_heads=8,
-            transformer_layers=12,
-        )
-    )
+    # model = CLIP4Clip(
+    #     **dict(
+    #         # vision
+    #         embed_dim=512,
+    #         image_resolution=224,
+    #         vision_layers=12,
+    #         vision_width=768,
+    #         vision_patch_size=32,
+    #         # text
+    #         context_length=77,
+    #         vocab_size=49408,
+    #         transformer_width=512,
+    #         transformer_heads=8,
+    #         transformer_layers=12,
+    #     )
+    # )
+    # model = clip4clip.create_model(model_name="clip_vit_b32", context_length=77, pretrained=False, device='cuda')
+
+    model = ops.video_text_embedding.clip4clip(model_name='clip_vit_b32', modality='video', device='cpu').get_op()
+
+    print(dir(model))
+    exit()
     which = "train"
     data_dir = pathlib.Path(__file__).parents[1] / "data"
     train_data = NFLDataset(data_dir / which, True)
