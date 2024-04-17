@@ -24,7 +24,7 @@ from towhee.models import clip4clip
 from towhee.models.clip4clip.until_module import PreTrainedModel
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 class C4CTrainer(Trainer):
     def __init__(
         self,
@@ -100,12 +100,12 @@ if __name__ == "__main__":
     #         transformer_layers=12,
     #     )
     # )
-    # model = clip4clip.create_model(model_name="clip_vit_b32", context_length=77, pretrained=False, device='cuda')
+    model = clip4clip.create_model(model_name="clip_vit_b32", context_length=77, pretrained=False, device='cpu')
 
-    model = ops.video_text_embedding.clip4clip(model_name='clip_vit_b32', modality='video', device='cpu').get_op()
+    # model = ops.video_text_embedding.clip4clip(model_name='clip_vit_b32', modality='video', device='cpu').get_op()
 
-    print(dir(model))
-    exit()
+    # print(dir(model))
+    # exit()
     which = "train"
     data_dir = pathlib.Path(__file__).parents[1] / "data"
     train_data = NFLDataset(data_dir / which, True)
