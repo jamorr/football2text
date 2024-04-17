@@ -22,7 +22,7 @@ class NFLImageDataset(Dataset):
         self.play_dir = data_path/'tracking_weeks'
         self.batch_size = batch_size
         self.img_size = img_size
-        # self.target = pd.read_parquet(data_path/'target.parquet', dtype_backend='numpy_nullable') #.convert_dtypes(dtype_backend='numpy_nullable')
+        self.target = pd.read_parquet(data_path/'target.parquet', dtype_backend='numpy_nullable', columns=['gameId', 'playId']) #.convert_dtypes(dtype_backend='numpy_nullable')
         self.id_cols = ['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']
         self.tracking_cols = ['x', 'y', 's', 'a', 'dis', 'o', 'dir']
         # TODO: Add support for the mapping of ids to strings
@@ -40,29 +40,47 @@ class NFLImageDataset(Dataset):
             self.play_dir,
             dtype_backend='numpy_nullable',
             columns=['gameId','playId', 'frameId']
-            )
+            ).drop_duplicates(keep='last')
+        self.loaded_frames = None
+        self.vid_idx = 0
 
     def __len__(self):
-        return len(self.target)
+        return len(self.tracking_weeks) #// self.batch_size
+
+
+    def _load_frames_batch(self):
+        tup = self.target.iloc[self.vid_idx]
+        self.vid_idx += 1
+        file_path = self.data_dir/"mp4_data"/f'{tup.gameId}-{tup.playId}.mp4'
+        frames, *_ = read_video(str(file_path.absolute()))
+        self.loaded_frames = [frame for frame in frames]
+        # default batchsize is 30
+        # idx = index*self.batch_size
+        # plays = self.tracking_weeks.iloc[idx:idx+40]
+        # fstack = torch.zeros((self.batch_size, self.img_size, self.img_size, 3))
+        # num_frames = 0
+        # for tup in plays.itertuples(False):
+        #     file_path = self.data_dir/"mp4_data"/f'{tup.gameId}-{tup.playId}.mp4'
+        #     frames, *_ = read_video(str(file_path.absolute()),end_pts=tup.frameId)
+        #     num_frames += len(frames)
+        #     fstack[0:tup.frameId] = frames
+        # assert num_frames == self.batch_size
+        # return fstack
 
     def __getitem__(self, index) -> Any:
-        # default batchsize is 30
-        idx = index*self.batch_size
-        plays = self.tracking_weeks.iloc[idx:idx+40]
-        plays = plays.drop_duplicates(keep='last')
-        fstack = torch.zeros((self.batch_size, self.img_size, self.img_size, 3))
-        for tup in plays.itertuples(False):
-            file_path = self.data_dir/"mp4_data"/f'{tup.gameId}-{tup.playId}.mp4'
-            frames, *_ = read_video(str(file_path.absolute()),end_pts=tup.frameId)
-            fstack[0:tup.frameId] = frames
-        return fstack
+        if not self.loaded_frames:
+            self._load_frames_batch()
+        return self.loaded_frames.pop()
+
+
 
 if __name__ == "__main__":
     from time import perf_counter
     which = "val"
     data_dir = pathlib.Path(__file__).parents[2]/"data"/which
     dset = NFLImageDataset(data_dir)
+    print(len(dset))
     start = perf_counter()
-    for img in dset:
-        pass
+    for i, img in enumerate(dset):
+        print(i, end="\r")
     print(f"finished reading {which} dataset in {perf_counter()-start:.2f}s")
