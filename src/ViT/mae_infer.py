@@ -2,14 +2,6 @@ import datetime
 import pathlib
 
 from transformers import (
-    AutoImageProcessor,
-    AutoTokenizer,
-    HfArgumentParser,
-    RobertaForMaskedLM,
-    Trainer,
-    TrainingArguments,
-    VisionTextDualEncoderModel,
-    VisionTextDualEncoderProcessor,
     ViTImageProcessor,
     ViTMAEForPreTraining,
 )

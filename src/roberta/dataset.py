@@ -1,21 +1,12 @@
 import pathlib
-import shutil
 from typing import Any
-from PIL import Image as PILImage
 
-import numpy as np
 import pandas as pd
-import torch
-from lightning.pytorch import LightningDataModule, seed_everything
-from torch.utils.data import DataLoader, Dataset
-from torchvision.io import read_video
-from towhee import ops
-from towhee.models.clip.clip_utils import tokenize
-from torchvision import transforms
+from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
 class NFLTextDataset(Dataset):
-    def __init__(self, data_path:pathlib.Path, which:str = "train",batch_size:int = 40) -> None:
+    def __init__(self, data_path:pathlib.Path, which:str = "train") -> None:
         super().__init__()
         assert data_path.exists()
         self.data_dir = data_path
@@ -25,7 +16,6 @@ class NFLTextDataset(Dataset):
         self.tracking_cols = ['x', 'y', 's', 'a', 'dis', 'o', 'dir']
         self.tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
         self.which = which
-        print(self.play_dir)
         self.tracking_weeks = pd.read_parquet(
             self.play_dir,
             dtype_backend='numpy_nullable',

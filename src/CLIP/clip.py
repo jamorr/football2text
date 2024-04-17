@@ -12,6 +12,8 @@ from transformers import (
     ViTImageProcessor,
     ViTMAEForPreTraining,
 )
+
+
 def main():
     here = pathlib.Path(__file__).parent
     root_dir = here.parents[1]
@@ -21,7 +23,7 @@ def main():
     vit_pretrained = ViTMAEForPreTraining.from_pretrained(
         models_dir / "ViT" / vit_ver,
     )
-    vit_model = vit_pretrained.vit
+    vit_model = vit_pretrained.vit  # type: ignore
     vit_encoder_dir = models_dir / "ViT_encoder" / vit_ver
     if not (vit_encoder_dir).exists():
         vit_encoder_dir.mkdir(parents=True)
@@ -31,10 +33,10 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
     preprocessor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     clip_model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        vit_encoder_dir, models_dir/"roberta" # type: ignore
+        vit_encoder_dir,
+        models_dir / "roberta",  # type: ignore
     )
     Trainer(clip_model, train_dataset)
-
 
 
 # image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
