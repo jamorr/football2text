@@ -1,9 +1,0 @@
-python run_mlm.py \
-    --model_name_or_path jkruk/distilroberta-base-ft-nfl \
-    --train_file /home/jaydenfassett/football2text/src/roberta/data/train.csv \
-    --validation_file /home/jaydenfassett/football2text/src/roberta/data/val.csv \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 8 \
-    --do_train \
-    --do_eval \
-    --output_dir /tmp/test-mlm
