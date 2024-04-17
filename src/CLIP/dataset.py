@@ -17,22 +17,6 @@ from transformers import AutoImageProcessor, ViTMAEModel
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
-class NFLTextDataset(Dataset):
-    def __init__(self, data_path:pathlib.Path, which:str = "train") -> None:
-        super().__init__()
-        assert data_path.exists()
-
-    def __len__(self):
-        return len(self.target)
-
-    def build_csvs(self):
-        df = pd.DataFrame(self.target['playDescription']).rename({'playDescription':'text'},axis=1)
-        df.to_csv(pathlib.Path(f"data/{self.which}.csv"))
-
-    def __getitem__(self, index) -> Any:
-        return self.target.iloc[index]['playDescription']
-
-
 class NFLJPEGDataset(Dataset):
     def __init__(self, data_path:pathlib.Path, which:str = "train") -> None:
         super().__init__()
@@ -46,8 +30,6 @@ class NFLJPEGDataset(Dataset):
         self.image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
         #Text
         self.target = pd.read_parquet(data_path/ which / "target.parquet", dtype_backend='numpy_nullable', columns=['gameId', 'playId','playDescription']) #.convert_dtypes(dtype_backend='numpy_nullable')
-
-        self.tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
         self.which = which
         #     self.tfms = transforms.Compose([
         #     transforms.ToPILImage(),
@@ -69,7 +51,7 @@ class NFLJPEGDataset(Dataset):
         # Getting play, and then indexing by frameID. If this doesn't work then we might need to reset_index
         self.play = self.target[(self.target["gameId"] == gameId)&(self.target["playId"] == playId)]
         text = self.play.iloc[frameID]['playDescription']
-        return text,read_image(img_file_path)
+        return text, read_image(img_file_path)
         # THIS DOESNT WORK FOR SOME REASON
         # return read_image(str(self.img_list[index % len(self)].absolute()))
     
@@ -79,6 +61,3 @@ if __name__ == "__main__":
     # print(data_dir)
     # df = NFLJPEGDataset(data_dir)
     # print(len(df))
-
-    x = "523.jpeg"
-    print(x[:-5])
