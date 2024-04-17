@@ -2,6 +2,8 @@ import pathlib
 import shutil
 from typing import Any
 from PIL import Image as PILImage
+from time import perf_counter
+from PIL import Image
 
 import numpy as np
 import pandas as pd
@@ -131,18 +133,22 @@ class NFLJPEGDataset(Dataset):
         # THIS DOESNT WORK FOR SOME REASON
         return read_image(str(self.img_list[index % len(self)].absolute()))
 
-if __name__ == "__main__":
-    from time import perf_counter
-    from PIL import Image
-    for which in ("train", "test", "val"):
-    # which = "val"
-        data_dir = pathlib.Path(__file__).parents[2]/"data"/which
+def write_mp4_to_jpeg(data_path:pathlib.Path, splits=("train", "test", "val")):
+    for which in splits:
+        data_dir = data_path /which
         dset = NFLImageDataset(data_dir, write_mode=True)
         start = perf_counter()
         for i, (frame, sloc) in tqdm(enumerate(dset)): # type: ignore
             im = Image.fromarray(frame.numpy())
             im.save(sloc)
-            # sloc = ''.join([ch for ch in sloc])
-            # write_png(frame, sloc)
-            # print(i, end="\r")
         print(f"finished writing {which} dataset in {perf_counter()-start:.2f}s")
+
+if __name__ == "__main__":
+
+    data_dir = pathlib.Path(__file__).parents[2]/"data"
+
+    dset = NFLJPEGDataset(data_dir/"val")
+    for image in tqdm(dset):
+        pass
+
+
