@@ -197,7 +197,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_mae", model_args, data_args)
+    # send_example_telemetry("run_mae", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -311,14 +311,14 @@ def main():
     # else:
     #     column_names = ds["validation"].column_names
 
-    if data_args.image_column_name is not None:
-        image_column_name = data_args.image_column_name
-    elif "image" in column_names:
-        image_column_name = "image"
-    elif "img" in column_names:
-        image_column_name = "img"
-    else:
-        image_column_name = column_names[0]
+    # if data_args.image_column_name is not None:
+    #     image_column_name = data_args.image_column_name
+    # elif "image" in column_names:
+    #     image_column_name = "image"
+    # elif "img" in column_names:
+    #     image_column_name = "img"
+    # else:
+    #     image_column_name = column_names[0]
 
     # transformations as done in original MAE paper
     # source: https://github.com/facebookresearch/mae/blob/main/main_pretrain.py
