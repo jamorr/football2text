@@ -20,7 +20,6 @@ def main():
 
     vit_pretrained = ViTMAEForPreTraining.from_pretrained(
         models_dir / "ViT" / vit_ver,
-        from_tf=False,  # true if from ckpt
     )
     vit_model = vit_pretrained.vit
     vit_encoder_dir = models_dir / "ViT_encoder" / vit_ver
@@ -32,8 +31,9 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
     preprocessor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     clip_model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        vit_encoder_dir, models_dir/"roberta"
+        vit_encoder_dir, models_dir/"roberta" # type: ignore
     )
+    Trainer(clip_model, train_dataset)
 
 
 
