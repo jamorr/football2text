@@ -43,7 +43,8 @@ class NFLVisionTextDataset(Dataset):
 
 
 if __name__ == "__main__":
-    data_dir = pathlib.Path(__file__).parents[1].parent / "data"
+    data_dir = pathlib.Path("/media/jj_data/data")
+    # data_dir = pathlib.Path(__file__).parents[1].parent / "data"
     print(data_dir)
     dset = NFLVisionTextDataset(data_dir/"val")
     for d in tqdm(dset):

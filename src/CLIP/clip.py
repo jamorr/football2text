@@ -14,8 +14,7 @@ from transformers import (
 
 
 def main():
-    here = pathlib.Path(__file__).parent
-    root_dir = here.parents[1]
+    root_dir = pathlib.Path("/media/jj_data/")
     models_dir = root_dir / "models"
     vit_ver = "1"
 
@@ -28,14 +27,14 @@ def main():
         vit_encoder_dir.mkdir(parents=True)
         vit_model.save_pretrained(vit_encoder_dir)
 
-    image_processor = AutoImageProcessor.from_pretrained(models_dir / "ViT_encoder" / vit_ver)
+    image_processor = AutoImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver)
     tokenizer = AutoTokenizer.from_pretrained(models_dir / "roberta")
     preprocessor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     clip_model = VisionTextDualEncoderModel.from_vision_text_pretrained(
         vit_encoder_dir,
         models_dir / "roberta",  # type: ignore
     )
-    Trainer(clip_model, train_dataset)
+    # Trainer(clip_model, train_dataset)
 
 
 if __name__ == "__main__":
