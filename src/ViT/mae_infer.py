@@ -1,20 +1,25 @@
 import datetime
 import pathlib
 
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from dataset import NFLImageDataset
+from matplotlib.axes import Axes
+from torchvision.transforms import (
+    Compose,
+    Lambda,
+    Normalize,
+    RandomHorizontalFlip,
+    RandomResizedCrop,
+    ToTensor,
+)
+from torchvision.transforms.functional import InterpolationMode
 from transformers import (
     ViTImageProcessor,
     ViTMAEForPreTraining,
 )
-from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
-from torchvision.transforms.functional import InterpolationMode
 
-
-
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.axes import Axes
-from dataset import NFLImageDataset
 # make the plt figure larger
 plt.rcParams['figure.figsize'] = [20, 5]
 
