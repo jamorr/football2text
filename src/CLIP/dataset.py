@@ -25,9 +25,6 @@ class NFLVisionTextDataset(Dataset):
             dtype_backend="numpy_nullable",
             columns=["gameId", "playId", "playDescription"],
         )
-        print(self.target.dtypes)
-        print(self.target)
-        exit()
 
     def __len__(self):
         return len(self.img_list)
@@ -36,12 +33,13 @@ class NFLVisionTextDataset(Dataset):
         img_file_path = self.img_list[index]
         file_name = img_file_path.name
         gameId, playId, *_ = file_name.split("-")[0:2]
-        print(gameId, playId)
+        gameId, playId = int(gameId), int(playId)
         # Getting play, and then indexing by frameID. If this doesn't work then we might need to reset_index
         play = self.target[
             (self.target["gameId"] == gameId) & (self.target["playId"] == playId)
         ]
-        return play.loc["playDescription"], read_image(img_file_path)
+
+        return play["playDescription"], read_image(str(img_file_path.absolute()))
 
 
 if __name__ == "__main__":
