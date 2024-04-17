@@ -99,7 +99,7 @@ class NFLImageDataset(Dataset):
 
         if not self.loaded_frames:
             self._load_frames_batch()
-        return self.tfms(self.loaded_frames.pop())
+        return self.tfms(self.loaded_frames.pop()) # type: ignore
         # out =  self.image_processor(self.loaded_frames.pop().squeeze())
         # print(len(out), type(out), end="\r")
 
@@ -139,7 +139,7 @@ if __name__ == "__main__":
         data_dir = pathlib.Path(__file__).parents[2]/"data"/which
         dset = NFLImageDataset(data_dir, write_mode=True)
         start = perf_counter()
-        for i, (frame, sloc) in tqdm(enumerate(dset)):
+        for i, (frame, sloc) in tqdm(enumerate(dset)): # type: ignore
             im = Image.fromarray(frame.numpy())
             im.save(sloc)
             # sloc = ''.join([ch for ch in sloc])

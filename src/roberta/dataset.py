@@ -33,18 +33,14 @@ class NFLTextDataset(Dataset):
             ).drop_duplicates(keep='last')
 
     def __len__(self):
-        return len(self.tracking_weeks) #// self.batch_size
+        return len(self.tracking_weeks)
+
     def build_csvs(self):
         df = pd.DataFrame(self.target['playDescription']).rename({'playDescription':'text'},axis=1)
         df.to_csv(pathlib.Path(f"data/{self.which}.csv"))
-    def __getitem__(self, index) -> Any:
-        # target_play = self.target.iloc[index]['playDescription']
-        # token = self.tokenizer(target_play,return_tensors='pt')
-        # print(type(token),token)
-        target_play = self.target.iloc[index]['playDescription']
-        # token = self.tokenizer(target_play,return_tensors='pt')
 
-        return target_play
+    def __getitem__(self, index) -> Any:
+        return self.target.iloc[index]['playDescription']
 
 
 
