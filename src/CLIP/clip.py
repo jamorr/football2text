@@ -28,12 +28,15 @@ def main():
         vit_encoder_dir.mkdir(parents=True)
         vit_model.save_pretrained(vit_encoder_dir)
 
-
+    image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
+    tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
+    preprocessor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     clip_model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        vit_encoder_dir, "jkruk/distilroberta-base-ft-nfl"
+        vit_encoder_dir, models_dir/"roberta"
     )
 
-# tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
+
+
 # image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
 if __name__ == "__main__":
     main()
