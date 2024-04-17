@@ -1,6 +1,9 @@
 name: football
 channels:
   - defaults
+  - conda-forge
+  - nvidia
+  - pytorch
 dependencies:
   - ffmpeg
   - ipykernel

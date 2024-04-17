@@ -52,19 +52,19 @@ class NFLDataset(Dataset):
             # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
             token = tokenize(target_play['playDescription'])
             # print(len(video), video[0].shape)
-            
+
             max_frames = 12
             video = np.zeros((1, max_frames, 1, 3, 224, 224), dtype=np.float64)
             slice_len = len(img_list)
             max_video_length = 0 if 0 > slice_len else slice_len
             for i, img in enumerate(img_list):
                 pil_img = PILImage.fromarray(img, "RGB")
-                tfmed_img = self.tfms(pil_img).unsqueeze(0)
+                tfmed_img = self.tfms(pil_img).unsqueeze(0)  #type:ignore
                 if slice_len >= 1:
                     video[0, i, ...] = tfmed_img.cpu().numpy()
             video_mask = np.zeros((1, max_frames), dtype=np.int32)
             video_mask[0, :max_video_length] = [1] * max_video_length
-            
+
             return token, video, video_mask
             # return ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription']), video, torch.ones(len(video))
 
@@ -157,6 +157,7 @@ class NFLDataModule(LightningDataModule):
             tracking_df.drop(["displayName", "time"], inplace=True, axis='columns')
             tracking_df.fillna(-1, inplace=True)
             tracking_df.to_parquet(self.data_path/"tracking_weeks", partition_cols=["gameId", "playId"])
+
         print("Creating map parquets from id to name")
         events_to_id_df = pd.DataFrame({'id': range(len(events)), 'category': events})
         events_to_id_df.to_parquet(data_dir/'events_id_map.parquet')
@@ -171,17 +172,23 @@ class NFLDataModule(LightningDataModule):
         players_df.to_parquet(data_dir/'players.parquet')
 
         target_df = pd.read_csv(data_dir/'plays.csv', dtype_backend='pyarrow')
-        target_df.to_parquet(data_dir/'target.parquet')
+        target_df.to_parquet(data_dir/"target.parquet")
+
         print("Loading full dataset")
         dataset = NFLDataset(self.data_path, False)
         print("Removing examples with missing tracking data")
         missing_indices = []
         for i in range(len(dataset)):
             try:
-                dataset[i]
+                id_data, *_ = dataset[i]
+                # remove if not 3 teams including ball team in play
+                if len(np.unique(id_data[0, :, 3])) != 3:
+                    raise FileNotFoundError
             except FileNotFoundError:
                 missing_indices.append(i)
-        missing_dropped_df:pd.DataFrame = dataset.target.drop(missing_indices, axis='rows')
+        # drop missing indices and save the remaining to a parquet in main folder
+        missing_dropped_df:pd.DataFrame = target_df.drop(missing_indices, axis='rows') #type:ignore
+        missing_dropped_df.to_parquet(data_dir/"target.parquet")
         print("Splitting dataset into Train/Val/Test")
         msk = np.random.rand(len(missing_dropped_df)) < (train + val)
         train_val_df = missing_dropped_df.iloc[msk]
@@ -224,21 +231,24 @@ class NFLDataModule(LightningDataModule):
 
 
     def setup(self, which):
+        dsets = {"train":"train", "test":"test", "val":"val", "fit":"train", "predict":None}
+        which = dsets[which]
+        assert which
         setattr(self, f"{which}_dataset",  NFLDataset(data_path=self.data_path/which, include_str_types=self.include_str_types))
 
     def train_dataloader(self) -> Any:
         return DataLoader(
-            self.train_dataset,
+            self.train_dataset,  # type:ignore
             **self.loader_args)
 
     def val_dataloader(self) -> Any:
         return DataLoader(
-            self.val_dataset,
+            self.val_dataset,  # type:ignore
             **self.loader_args)
 
     def test_dataloader(self) -> Any:
         return DataLoader(
-            self.test_dataset,
+            self.test_dataset,  # type:ignore
             **self.loader_args)
 
 

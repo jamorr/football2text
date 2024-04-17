@@ -188,32 +188,27 @@ def animate_play_tensor(dataloader_input, save_loc):
 
 
 if __name__ == "__main__":
-    import pathlib
-
     from dataset import NFLDataModule
 
-    which = "val"
-    save_loc = data_dir / which / "mp4_data"
-    team_names = pd.read_parquet(data_dir / which / "team_id_map.parquet")
-    if not save_loc.exists():
-        save_loc.mkdir()
-    dmod = NFLDataModule(data_dir)
-    dmod.setup(which)
-    dataloader = dmod.val_dataloader()
-    animate_with_saveloc = partial(animate_play_tensor, save_loc=save_loc)
-    print("Starting MP4 creation...")
-
-    start = time.perf_counter()
     # for i, data in enumerate(dataloader):
     #     animate_with_saveloc(data)
     #     if i == 3:
     #         print(f"Time to write images: {time.perf_counter() - start:.2f}")
     #         exit()
-
-    worker_count = int(0.9 * mp.cpu_count())
     mp.set_start_method("spawn")
 
-    with Pool(worker_count) as p:
-        p.map(animate_with_saveloc, dataloader)
-
-    print(f"Time to write images: {time.perf_counter() - start:.2f}")
+    for which in ("val", "test", "train"):
+        save_loc = data_dir / which / "mp4_data"
+        team_names = pd.read_parquet(data_dir / which / "team_id_map.parquet")
+        if not save_loc.exists():
+            save_loc.mkdir()
+        dmod = NFLDataModule(data_dir)
+        dmod.setup(which)
+        dataloader = getattr(dmod, f"{which}_dataloader")()
+        animate_with_saveloc = partial(animate_play_tensor, save_loc=save_loc)
+        print(f"Starting MP4 creation for {which} dataset...")
+        start = time.perf_counter()
+        worker_count = int(0.9 * mp.cpu_count())
+        with Pool(worker_count) as p:
+            p.map(animate_with_saveloc, dataloader)
+        print(f"Time to write images: {time.perf_counter() - start:.2f}")
