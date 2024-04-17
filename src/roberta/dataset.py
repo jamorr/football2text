@@ -20,12 +20,12 @@ class NFLTextDataset(Dataset):
         assert data_path.exists()
         self.data_dir = data_path
         self.play_dir = data_path/ which / 'tracking_weeks'
-        self.target = pd.read_parquet(data_path/'target.parquet', dtype_backend='numpy_nullable', columns=['gameId', 'playId','playDescription']) #.convert_dtypes(dtype_backend='numpy_nullable')
+        self.target = pd.read_parquet(data_path/which / "target.parquet", dtype_backend='numpy_nullable', columns=['gameId', 'playId','playDescription']) #.convert_dtypes(dtype_backend='numpy_nullable')
         self.id_cols = ['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']
         self.tracking_cols = ['x', 'y', 's', 'a', 'dis', 'o', 'dir']
         self.tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
-
-
+        self.which = which
+        print(self.play_dir)
         self.tracking_weeks = pd.read_parquet(
             self.play_dir,
             dtype_backend='numpy_nullable',
@@ -34,10 +34,9 @@ class NFLTextDataset(Dataset):
 
     def __len__(self):
         return len(self.tracking_weeks) #// self.batch_size
-    def build_csvs(self,which:list = ['train','val']):
-        for item in which:
-            df = pd.DataFrame(self.target['playDescription']).rename({'playDescription':'text'},axis=1)
-            df.to_csv(pathlib.path(f"data/{item}.csv"))
+    def build_csvs(self):
+        df = pd.DataFrame(self.target['playDescription']).rename({'playDescription':'text'},axis=1)
+        df.to_csv(pathlib.Path(f"data/{self.which}.csv"))
     def __getitem__(self, index) -> Any:
         # target_play = self.target.iloc[index]['playDescription']
         # token = self.tokenizer(target_play,return_tensors='pt')
@@ -53,6 +52,7 @@ class NFLTextDataset(Dataset):
 if __name__ == "__main__":
     data_dir = pathlib.Path(__file__).parents[1].parent / "data"
     print(data_dir)
-    ds = NFLTextDataset(data_dir,'val')
-    for item in ds:
-        print(item)
+    for item in ['train','test','val']:
+        print(f"Building {item}")
+        ds = NFLTextDataset(data_dir,which=item)
+        ds.build_csvs()
