@@ -46,7 +46,7 @@ class NFLTextDataset(Dataset):
         # token = self.tokenizer(target_play,return_tensors='pt')
 
         return target_play
-    
+
 
 
 

@@ -51,6 +51,7 @@ class NFLImageDataset(Dataset):
             ).drop_duplicates(keep='last')
         self.loaded_frames = None
         self.vid_idx = 0
+        self.last_index = -1
         self.image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
 
     def __len__(self):
@@ -91,9 +92,11 @@ class NFLImageDataset(Dataset):
         # return fstack
 
     def __getitem__(self, index) -> Any:
-        if index == 0:
+        if index < self.last_index:
             self.vid_idx = 0
             self.loaded_frames = None
+        self.last_index = index
+
         if not self.loaded_frames:
             self._load_frames_batch()
         return self.tfms(self.loaded_frames.pop())
@@ -125,6 +128,7 @@ class NFLJPEGDataset(Dataset):
         return len(self.img_list)
 
     def __getitem__(self, index) -> Any:
+        # THIS DOESNT WORK FOR SOME REASON
         return read_image(str(self.img_list[index % len(self)].absolute()))
 
 if __name__ == "__main__":
