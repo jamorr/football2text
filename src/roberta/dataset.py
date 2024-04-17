@@ -10,20 +10,12 @@ class NFLTextDataset(Dataset):
         super().__init__()
         assert data_path.exists()
         self.data_dir = data_path
-        self.play_dir = data_path/ which / 'tracking_weeks'
         self.target = pd.read_parquet(data_path/which / "target.parquet", dtype_backend='numpy_nullable', columns=['gameId', 'playId','playDescription']) #.convert_dtypes(dtype_backend='numpy_nullable')
-        self.id_cols = ['nflId', 'frameId', 'jerseyNumber', 'club', 'playDirection', 'event']
-        self.tracking_cols = ['x', 'y', 's', 'a', 'dis', 'o', 'dir']
         self.tokenizer = AutoTokenizer.from_pretrained("jkruk/distilroberta-base-ft-nfl")
         self.which = which
-        self.tracking_weeks = pd.read_parquet(
-            self.play_dir,
-            dtype_backend='numpy_nullable',
-            columns=['gameId','playId', 'frameId']
-            ).drop_duplicates(keep='last')
-
+        print(self.target)
     def __len__(self):
-        return len(self.tracking_weeks)
+        return len(self.target)
 
     def build_csvs(self):
         df = pd.DataFrame(self.target['playDescription']).rename({'playDescription':'text'},axis=1)
@@ -38,7 +30,9 @@ class NFLTextDataset(Dataset):
 if __name__ == "__main__":
     data_dir = pathlib.Path(__file__).parents[1].parent / "data"
     print(data_dir)
-    for item in ['train','test','val']:
-        print(f"Building {item}")
-        ds = NFLTextDataset(data_dir,which=item)
-        ds.build_csvs()
+    ds = NFLTextDataset(data_dir,"val")
+    # for item in ['train','test','val']:
+    #     print(f"Building {item}")
+    #     ds = NFLTextDataset(data_dir,which=item)
+    #     print(ds[10])
+    #     # ds.build_csvs()
