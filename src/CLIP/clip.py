@@ -1,3 +1,4 @@
+from dataclasses import field
 import os
 import pathlib
 from dataset import NFLVisionTextDataset
@@ -67,10 +68,31 @@ def collate_fn(examples):
     }
 
 
+# class CLIPTrainingArgs(TrainingArguments):
+#     output_dir: str = field(
+#         default="/media/jj_data/models/CLIP/1", metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+#     )
+class DummyClass:
+    def __init__(self) -> None:
+        pass
 
 def main():
-    parser = HfArgumentParser((TrainingArguments,))
-    training_args = parser.parse_args_into_dataclasses()[0]
+    mode = ''
+    if mode == 'debug':
+        training_args = DummyClass()
+        training_args.output_dir = "/media/jj_data/models/CLIP/1"
+        training_args.overwrite_output_dir = False
+        training_args.do_train = True
+        training_args.get_last_checkpoint = False
+        training_args.full_determinism = False
+        training_args.seed = 113
+        training_args.gradient_accumulation_steps = 1
+        training_args.dispatch_batches = False
+
+    else:
+        parser = HfArgumentParser((TrainingArguments,))
+        training_args = parser.parse_args_into_dataclasses()[0]
+
 
     root_dir = pathlib.Path("/media/jj_data/")
     models_dir = root_dir / "models"
@@ -92,9 +114,10 @@ def main():
         vit_encoder_dir,
         models_dir / "roberta",  # type: ignore
     )
+    # training_args.output_dir = training_args.output_dir if training_args.output_dir else
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if mode != 'debug' and os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
@@ -112,7 +135,7 @@ def main():
     image_transformations = Transform(
         224, image_processor.image_mean, image_processor.image_std
     )
-    image_transformations = torch.jit.script(image_transformations)
+    # image_transformations = torch.jit.script(image_transformations)
 
     dataset = load_dataset(
             "/media/jj_data/data/nfl_image_text_dataset.py",
@@ -120,15 +143,13 @@ def main():
             trust_remote_code=True
         )
     column_names = dataset["train"].column_names
-    image_column = "image_frame"
-    caption_column = "text"
+    image_column = "image"
+    caption_column = "description"
     train_dataset = dataset["train"]
     # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
-        print(examples)
         captions = list(examples[caption_column])
-        print(type(captions[0]))
         text_inputs = tokenizer(captions, max_length=128, padding="max_length", truncation=True)
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
@@ -144,15 +165,16 @@ def main():
         valid_images = []
         for image_file in examples[image_column]:
             try:
-                Image.open(image_file)
+                Image.open(image_file).convert('RGB')
                 valid_images.append(True)
             except Exception:
                 valid_images.append(False)
+                raise
         return valid_images
 
-    train_dataset = train_dataset.filter(
-        filter_corrupt_images, batched=True, num_proc=4
-    )
+    # train_dataset = train_dataset.filter(
+    #     filter_corrupt_images, batched=True, num_proc=4
+    # )
 
     train_dataset = train_dataset.map(
         function=tokenize_captions,
@@ -164,9 +186,9 @@ def main():
     train_dataset.set_transform(transform_images)
     eval_dataset = dataset["validation"]
 
-    eval_dataset = eval_dataset.filter(
-        filter_corrupt_images, batched=True, num_proc=4
-    )
+    # eval_dataset = eval_dataset.filter(
+    #     filter_corrupt_images, batched=True, num_proc=4
+    # )
     eval_dataset = eval_dataset.map(
         function=tokenize_captions,
         batched=True,
@@ -179,7 +201,8 @@ def main():
     eval_dataset.set_transform(transform_images)
 
 
-
+    # print(train_dataset['pixel_values'])
+    # exit()
     trainer = Trainer(
         clip_model,
         args=training_args,
