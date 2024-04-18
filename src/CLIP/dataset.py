@@ -39,7 +39,7 @@ class NFLVisionTextDataset(Dataset):
             (self.target["gameId"] == gameId) & (self.target["playId"] == playId)
         ]
 
-        return play["playDescription"], read_image(str(img_file_path.absolute()))
+        return {"input_ids":play["playDescription"].iloc[0], "pixel_values":read_image(str(img_file_path.absolute()))}
 
 
 if __name__ == "__main__":
