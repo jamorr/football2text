@@ -1,5 +1,6 @@
+import os
 import pathlib
-
+from dataset import NFLVisionTextDataset
 from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
@@ -11,6 +12,7 @@ from transformers import (
     ViTImageProcessor,
     ViTMAEForPreTraining,
 )
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def main():
@@ -34,8 +36,15 @@ def main():
         vit_encoder_dir,
         models_dir / "roberta",  # type: ignore
     )
-    # Trainer(clip_model, train_dataset)
+    trainer = Trainer(
+        clip_model,
+        train_dataset=NFLVisionTextDataset(root_dir/"data"/"train"),
+        eval_dataset=NFLVisionTextDataset(root_dir/"data"/"val"),
+        tokenizer=preprocessor
 
+    )
+    # collate_fn=collate_fn,
+    trainer.train()
 
 if __name__ == "__main__":
     main()
