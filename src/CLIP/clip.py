@@ -67,8 +67,8 @@ def collate_fn(examples):
 
 
 def main():
-    parser = HfArgumentParser((TrainingArguments))
-    training_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser((TrainingArguments,))
+    training_args = parser.parse_args_into_dataclasses()[0]
 
     root_dir = pathlib.Path("/media/jj_data/")
     models_dir = root_dir / "models"
@@ -90,6 +90,20 @@ def main():
         vit_encoder_dir,
         models_dir / "roberta",  # type: ignore
     )
+    # 3. Detecting last checkpoint and eventually continue from last checkpoint
+    last_checkpoint = None
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+        last_checkpoint = get_last_checkpoint(training_args.output_dir)
+        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to overcome."
+            )
+        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+            logger.info(
+                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
 
         # 7. Preprocessing the datasets.
     # Initialize torchvision transforms and jit it for faster processing.
@@ -102,7 +116,7 @@ def main():
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
         captions = list(examples[caption_column])
-        text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
+        text_inputs = tokenizer(captions, max_length=128, padding="max_length", truncation=True)
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
         return examples
@@ -133,7 +147,7 @@ def main():
     caption_column = "text"
     train_dataset = dataset["train"]
     train_dataset = train_dataset.filter(
-        filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+        filter_corrupt_images, batched=True, num_proc=4
     )
     train_dataset = train_dataset.map(
         function=tokenize_captions,
@@ -146,7 +160,7 @@ def main():
     eval_dataset = dataset["validation"]
 
     eval_dataset = eval_dataset.filter(
-        filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+        filter_corrupt_images, batched=True, num_proc=4
     )
     eval_dataset = eval_dataset.map(
         function=tokenize_captions,
