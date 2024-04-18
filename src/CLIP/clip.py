@@ -41,9 +41,7 @@ def main():
         train_dataset=NFLVisionTextDataset(root_dir/"data"/"train"),
         eval_dataset=NFLVisionTextDataset(root_dir/"data"/"val"),
         tokenizer=preprocessor
-
     )
-    # collate_fn=collate_fn,
     trainer.train()
 
 if __name__ == "__main__":
