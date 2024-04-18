@@ -12,6 +12,8 @@ from transformers import (
     ViTImageProcessor,
     ViTMAEForPreTraining,
 )
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+
 import torch
 from datasets import load_dataset
 from PIL import Image
@@ -112,10 +114,21 @@ def main():
     )
     image_transformations = torch.jit.script(image_transformations)
 
+    dataset = load_dataset(
+            "/media/jj_data/data/nfl_image_text_dataset.py",
+            'main',
+            trust_remote_code=True
+        )
+    column_names = dataset["train"].column_names
+    image_column = "image_frame"
+    caption_column = "text"
+    train_dataset = dataset["train"]
     # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
+        print(examples)
         captions = list(examples[caption_column])
+        print(type(captions[0]))
         text_inputs = tokenizer(captions, max_length=128, padding="max_length", truncation=True)
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
@@ -137,18 +150,10 @@ def main():
                 valid_images.append(False)
         return valid_images
 
-    dataset = load_dataset(
-            "/media/jj_data/data/nfl_image_text_dataset.py",
-            'main',
-            trust_remote_code=True
-        )
-    column_names = dataset["train"].column_names
-    image_column = "image_frame"
-    caption_column = "text"
-    train_dataset = dataset["train"]
     train_dataset = train_dataset.filter(
         filter_corrupt_images, batched=True, num_proc=4
     )
+
     train_dataset = train_dataset.map(
         function=tokenize_captions,
         batched=True,
@@ -179,7 +184,7 @@ def main():
         clip_model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        # eval_dataset=eval_dataset,
         data_collator=collate_fn,
         tokenizer=preprocessor
     )
@@ -188,7 +193,7 @@ def main():
         checkpoint = training_args.resume_from_checkpoint
     elif last_checkpoint is not None:
         checkpoint = last_checkpoint
-    train_result = trainer.train(resume_from_checkpoint=checkpoint)
+    train_result = trainer.train()
     trainer.save_model()
     tokenizer.save_pretrained(training_args.output_dir)
     image_processor.save_pretrained(training_args.output_dir)
