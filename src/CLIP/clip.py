@@ -13,6 +13,24 @@ from transformers import (
     ViTMAEForPreTraining,
 )
 import torch
+from datasets import load_dataset
+from PIL import Image
+from torchvision.io import ImageReadMode, read_image
+from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
+from torchvision.transforms.functional import InterpolationMode
+
+import transformers
+from transformers import (
+    AutoImageProcessor,
+    AutoModel,
+    AutoTokenizer,
+    HfArgumentParser,
+    Trainer,
+    TrainingArguments,
+    set_seed,
+)
+import torch
+import datasets
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
@@ -49,6 +67,9 @@ def collate_fn(examples):
 
 
 def main():
+    parser = HfArgumentParser((TrainingArguments))
+    training_args = parser.parse_args_into_dataclasses()
+
     root_dir = pathlib.Path("/media/jj_data/")
     models_dir = root_dir / "models"
     vit_ver = "1"
@@ -102,19 +123,69 @@ def main():
                 valid_images.append(False)
         return valid_images
 
+    dataset = load_dataset(
+            "/media/jj_data/data/nfl_image_text_dataset.py",
+            'main',
+            trust_remote_code=True
+        )
+    column_names = dataset["train"].column_names
+    image_column = "image_frame"
+    caption_column = "text"
+    train_dataset = dataset["train"]
+    train_dataset = train_dataset.filter(
+        filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+    )
+    train_dataset = train_dataset.map(
+        function=tokenize_captions,
+        batched=True,
+        remove_columns=[col for col in column_names if col != image_column],
+        num_proc=4,
+        desc="Running tokenizer on train dataset",
+    )
+    train_dataset.set_transform(transform_images)
+    eval_dataset = dataset["validation"]
 
+    eval_dataset = eval_dataset.filter(
+        filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+    )
+    eval_dataset = eval_dataset.map(
+        function=tokenize_captions,
+        batched=True,
+        num_proc=4,
+        remove_columns=[col for col in column_names if col != image_column],
+        desc="Running tokenizer on validation dataset",
+    )
 
+    # Transform images on the fly as doing it on the whole dataset takes too much time.
+    eval_dataset.set_transform(transform_images)
 
 
 
     trainer = Trainer(
         clip_model,
-        train_dataset=NFLVisionTextDataset(root_dir/"data"/"train"),
-        eval_dataset=NFLVisionTextDataset(root_dir/"data"/"val"),
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         data_collator=collate_fn,
         tokenizer=preprocessor
     )
-    trainer.train()
+    checkpoint = None
+    if training_args.resume_from_checkpoint is not None:
+        checkpoint = training_args.resume_from_checkpoint
+    elif last_checkpoint is not None:
+        checkpoint = last_checkpoint
+    train_result = trainer.train(resume_from_checkpoint=checkpoint)
+    trainer.save_model()
+    tokenizer.save_pretrained(training_args.output_dir)
+    image_processor.save_pretrained(training_args.output_dir)
+    trainer.log_metrics("train", train_result.metrics)
+    trainer.save_metrics("train", train_result.metrics)
+    trainer.save_state()
+
+    # 10. Evaluation
+    metrics = trainer.evaluate()
+    trainer.log_metrics("eval", metrics)
+    trainer.save_metrics("eval", metrics)
 
 if __name__ == "__main__":
     main()
