@@ -1,11 +1,9 @@
-python run_mae.py \
-    --dataset_name nateraw/image-folder \
-    --train_dir "/home/jackmorris/football/football2text/data/jpeg_data/train/*" \
-    --image_column_name image \
-    --output_dir /home/jackmorris/football/football2text/models/ViT/2 \
-    --remove_unused_columns False \
-    --label_names pixel_values \
-    --mask_ratio 0.75 \
+python og_train.py \
+    --dataset_name /media/jj_data/data/CLIP \
+    --dataset_config_name image_only \
+    --image_column_name pixel_values \
+    --output_dir /home/jackmorris/football/football2text/models/ViT/3 \
+    --mask_ratio 0.50 \
     --norm_pix_loss \
     --do_train \
     --do_eval \
@@ -14,7 +12,7 @@ python run_mae.py \
     --weight_decay 0.05 \
     --num_train_epochs 10 \
     --warmup_ratio 0.05 \
-    --per_device_train_batch_size 200 \
+    --per_device_train_batch_size 150 \
     --per_device_eval_batch_size 200 \
     --logging_strategy steps \
     --logging_steps 10 \

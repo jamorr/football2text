@@ -96,22 +96,30 @@ def main():
 
     root_dir = pathlib.Path("/media/jj_data/")
     models_dir = root_dir / "models"
-    vit_ver = "1"
+    # vit_ver = "1"
 
-    vit_pretrained = ViTMAEForPreTraining.from_pretrained(
-        models_dir / "ViT" / vit_ver,
-    )
-    vit_model = vit_pretrained.vit  # type: ignore
-    vit_encoder_dir = models_dir / "ViT_encoder" / vit_ver
-    if not (vit_encoder_dir).exists():
-        vit_encoder_dir.mkdir(parents=True)
-        vit_model.save_pretrained(vit_encoder_dir)
+    # vit_pretrained = ViTMAEForPreTraining.from_pretrained(
+    #     models_dir / "ViT" / vit_ver,
+    # )
+    # vit_model = vit_pretrained.vit  # type: ignore
+    # vit_encoder_dir = models_dir / "ViT_encoder" / vit_ver
+    # if not (vit_encoder_dir).exists():
+    #     vit_encoder_dir.mkdir(parents=True)
+    #     vit_model.save_pretrained(vit_encoder_dir)
 
-    image_processor = AutoImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver)
+    'google/vit-base-patch16-224'
+    # image_processor = AutoImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver)
+
+    image_processor = AutoImageProcessor.from_pretrained('google/vit-base-patch16-224')
+
     tokenizer = AutoTokenizer.from_pretrained(models_dir / "roberta")
     preprocessor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
+    # clip_model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+    #     vit_encoder_dir,
+    #     models_dir / "roberta",  # type: ignore
+    # )
     clip_model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        vit_encoder_dir,
+        'google/vit-base-patch16-224',
         models_dir / "roberta",  # type: ignore
     )
     # training_args.output_dir = training_args.output_dir if training_args.output_dir else
@@ -172,9 +180,9 @@ def main():
                 raise
         return valid_images
 
-    # train_dataset = train_dataset.filter(
-    #     filter_corrupt_images, batched=True, num_proc=4
-    # )
+    train_dataset = train_dataset.filter(
+        filter_corrupt_images, batched=True, num_proc=4
+    )
 
     train_dataset = train_dataset.map(
         function=tokenize_captions,
@@ -223,6 +231,7 @@ def main():
     trainer.log_metrics("train", train_result.metrics)
     trainer.save_metrics("train", train_result.metrics)
     trainer.save_state()
+
 
     # 10. Evaluation
     metrics = trainer.evaluate()

@@ -9,12 +9,13 @@ from transformers import AutoImageProcessor
 
 
 class NFLVisionTextDataset(Dataset):
-    def __init__(self, data_path: pathlib.Path) -> None:
+    def __init__(self, data_path: pathlib.Path, return_image_path:bool = True) -> None:
         super().__init__()
         if isinstance(data_path, str):
             data_path = pathlib.Path(data_path)
         assert data_path.exists()
         # Img
+        self.return_image_path = return_image_path
         self.data_dir: pathlib.Path = data_path
         self.img_path: pathlib.Path = data_path / "jpeg_data"
         self.img_list = list(self.img_path.glob("*.jpeg"))
@@ -38,14 +39,26 @@ class NFLVisionTextDataset(Dataset):
         play = self.target[
             (self.target["gameId"] == gameId) & (self.target["playId"] == playId)
         ]
-
+        if self.return_image_path:
+            return {"input_ids":play["playDescription"].iloc[0], "pixel_values":str(img_file_path.absolute())}
         return {"input_ids":play["playDescription"].iloc[0], "pixel_values":read_image(str(img_file_path.absolute()))}
+
+
+def create_parquets(data_dir:pathlib.Path, splits:tuple[str, ...] = ("train", "test", "val"), overwrite:bool = False):
+
+    for which in splits:
+        if (data_dir/which/"text_image.parquet").exists() and not overwrite:
+            continue
+        dset = NFLVisionTextDataset(data_dir/which)
+
+        data = []
+        for d in tqdm(dset): #type:ignore
+            data.append(d)
+
+        df = pd.DataFrame.from_records(data)
+        df.to_parquet(data_dir/which/"text_image.parquet")
 
 
 if __name__ == "__main__":
     data_dir = pathlib.Path("/media/jj_data/data")
-    # data_dir = pathlib.Path(__file__).parents[1].parent / "data"
-    print(data_dir)
-    dset = NFLVisionTextDataset(data_dir/"val")
-    for d in tqdm(dset):
-        pass
+    create_parquets(data_dir)

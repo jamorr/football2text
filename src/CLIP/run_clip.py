@@ -22,13 +22,27 @@ and text models:
 Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://huggingface.co/models?filter=clip)
 Text models: BERT, ROBERTa (https://huggingface.co/models?filter=fill-mask)
 """
-
+import pathlib
+from transformers import (
+    AutoImageProcessor,
+    AutoTokenizer,
+    RobertaForMaskedLM,
+    Trainer,
+    TrainingArguments,
+    VisionTextDualEncoderModel,
+    VisionTextDualEncoderProcessor,
+    ViTImageProcessor,
+    ViTMAEForPreTraining,
+    ViTForImageClassification,
+)
 import logging
 import os
 import sys
 import warnings
 from dataclasses import dataclass, field
 from typing import Optional
+
+from torchinfo import summary
 
 import torch
 from datasets import load_dataset
@@ -54,10 +68,6 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 
-# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
-
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/contrastive-image-text/requirements.txt")
 
 
 @dataclass
@@ -263,7 +273,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_clip", model_args, data_args)
+    # send_example_telemetry("run_clip", model_args, data_args)
 
     # 2. Setup logging
     logging.basicConfig(
@@ -365,24 +375,45 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    # Load image_processor, in this script we only use this to get the mean and std for normalization.
-    image_processor = AutoImageProcessor.from_pretrained(
-        model_args.image_processor_name or model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        token=model_args.token,
-        trust_remote_code=model_args.trust_remote_code,
-    )
 
-    model = AutoModel.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        token=model_args.token,
-        trust_remote_code=model_args.trust_remote_code,
+    # model = AutoModel.from_pretrained(
+    #     model_args.model_name_or_path,
+    #     cache_dir=model_args.cache_dir,
+    #     revision=model_args.model_revision,
+    #     token=model_args.token,
+    #     trust_remote_code=model_args.trust_remote_code,
+    # )
+    root_dir = pathlib.Path("/media/jj_data/")
+    models_dir = root_dir / "models"
+    vit_ver = "2/checkpoint-7896"
+    # vit_pretrained = ViTMAEForPreTraining.from_pretrained(
+    #     models_dir / "ViT" / vit_ver,
+    # )
+    vit_im_class = ViTForImageClassification.from_pretrained(models_dir / "ViT" / vit_ver,)
+
+    vit_encoder_dir = models_dir / "ViT_encoder" / '2'
+    if not (vit_encoder_dir).exists():
+        vit_encoder_dir.mkdir(parents=True)
+        vit_im_class.save_pretrained(vit_encoder_dir)
+    image_processor = AutoImageProcessor.from_pretrained(vit_encoder_dir)
+
+    # image_processor = AutoImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver)
+    tokenizer = AutoTokenizer.from_pretrained(models_dir / "roberta")
+    model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+        vit_encoder_dir,
+        models_dir / "roberta",  # type: ignore
     )
+    # model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+    #     # models_dir / "ViT" / vit_ver, # type: ignore
+    #     vit_encoder_dir,
+    #     models_dir / "roberta",  # type: ignore
+    # )
+
     config = model.config
 
+
+    # set seed for torch dataloaders
+    set_seed(training_args.seed)
     def _freeze_params(module):
         for param in module.parameters():
             param.requires_grad = False
@@ -393,8 +424,9 @@ def main():
     if model_args.freeze_text_model:
         _freeze_params(model.text_model)
 
-    # set seed for torch dataloaders
-    set_seed(training_args.seed)
+    # print(config)
+    # exit()
+
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
@@ -473,7 +505,7 @@ def main():
         train_dataset = train_dataset.map(
             function=tokenize_captions,
             batched=True,
-            remove_columns=[col for col in column_names if col != image_column],
+            # remove_columns=[col for col in column_names if col != image_column],
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on train dataset",
@@ -527,7 +559,9 @@ def main():
 
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         test_dataset.set_transform(transform_images)
-
+    # print(vit_model(train_dataset[0]["pixel_values"].unsqueeze(0))["last_hidden_state"].shape)
+    # print(model)
+    # exit()
     # 8. Initialize our trainer
     trainer = Trainer(
         model=model,
