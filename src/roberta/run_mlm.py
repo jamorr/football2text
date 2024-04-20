@@ -29,13 +29,14 @@ import warnings
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Optional
-
+# from torchmetrics import Accuracy
 import datasets
-import evaluate
+# import evaluate
 import torch
 from datasets import load_dataset
 import os
 import transformers
+
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
@@ -53,7 +54,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 # check_min_version("4.40.0.dev0")
 
@@ -607,7 +608,7 @@ def main():
                 logits = logits[0]
             return logits.argmax(dim=-1)
 
-        metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
+        # metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
 
         def compute_metrics(eval_preds):
             preds, labels = eval_preds
@@ -637,7 +638,9 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        compute_metrics=compute_metrics if training_args.do_eval and not False else None,
+        # compute_metrics=compute_accuracy if training_args.do_eval and not False else None,
+
+        # compute_metrics=compute_metrics if training_args.do_eval and not False else None,
         preprocess_logits_for_metrics=preprocess_logits_for_metrics
         if training_args.do_eval and not False
         else None,
