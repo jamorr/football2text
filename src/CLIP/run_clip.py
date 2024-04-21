@@ -310,8 +310,10 @@ def collate_fn(examples):
         "return_loss": True,
     }
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def main():
+
     # 1. Parse input arguments
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
