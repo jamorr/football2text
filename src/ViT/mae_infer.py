@@ -4,7 +4,7 @@ import pathlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from dataset import NFLImageDataset
+from dataset import NFLImageDataset, NFLJPEGDataset
 from matplotlib.axes import Axes
 from torchvision.transforms import (
     Compose,
@@ -61,24 +61,26 @@ def visualize(pixel_values, model, save_loc):
 
 def main():
     here = pathlib.Path(__file__).parent
-    root_dir = here.parents[1]
+    root_dir = pathlib.Path("/media/jj_data")
     models_dir = root_dir / "models"
-    vis_save_dir = root_dir / "assets" / "ViT_examples"
+    vis_save_dir = here.parents[1] / "assets" / "ViT_examples"
     which = "test"
-    vit_ver = '2/checkpoint-7896'
+    vit_ver = '5'
     vit_pretrained = ViTMAEForPreTraining.from_pretrained(models_dir / "ViT" / vit_ver,)
     image_processor = ViTImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver,)
     global imagenet_mean, imagenet_std
     imagenet_mean = np.array(image_processor.image_mean)
     imagenet_std = np.array(image_processor.image_std)
-    data_dir = pathlib.Path(__file__).parents[2]/"data"/which
+    data_dir = root_dir/"data"/which
 
 
     # image_processor = ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base")
-    dset = NFLImageDataset(data_dir)
+    dset = NFLJPEGDataset(data_dir)
     timestamp = datetime.datetime.now().strftime(r"%d_%m_%Y__%H_%M_%S")
     # feature_extractor = vit_pretrained.vit
-    visualize(image_processor(dset[0], return_tensors="pt").pixel_values, vit_pretrained, save_loc=vis_save_dir/f"test{timestamp}.jpeg")
+    idx = np.random.randint(0, len(dset))
+
+    visualize(image_processor(dset[idx], return_tensors="pt").pixel_values, vit_pretrained, save_loc=vis_save_dir/f"test{timestamp}-v.{vit_ver}.jpeg")
 
 if __name__ == "__main__":
     main()
