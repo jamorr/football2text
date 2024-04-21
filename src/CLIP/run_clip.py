@@ -68,6 +68,7 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 @dataclass
@@ -385,22 +386,24 @@ def main():
     # )
     root_dir = pathlib.Path("/media/jj_data/")
     models_dir = root_dir / "models"
-    vit_ver = "2/checkpoint-7896"
+    vit_ver = "5"
+    vit_dir = models_dir / "ViT" / vit_ver
     # vit_pretrained = ViTMAEForPreTraining.from_pretrained(
     #     models_dir / "ViT" / vit_ver,
     # )
-    vit_im_class = ViTForImageClassification.from_pretrained(models_dir / "ViT" / vit_ver,)
 
-    vit_encoder_dir = models_dir / "ViT_encoder" / '2'
-    if not (vit_encoder_dir).exists():
-        vit_encoder_dir.mkdir(parents=True)
-        vit_im_class.save_pretrained(vit_encoder_dir)
-    image_processor = AutoImageProcessor.from_pretrained(vit_encoder_dir)
+
+    vit_classifier_dir = models_dir / "ViT_encoder" / vit_ver
+    if not (vit_classifier_dir).exists():
+        vit_im_class = ViTForImageClassification.from_pretrained(vit_dir)
+        vit_classifier_dir.mkdir(parents=True)
+        vit_im_class.save_pretrained(vit_classifier_dir)
+    image_processor = AutoImageProcessor.from_pretrained(vit_dir)
 
     # image_processor = AutoImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver)
     tokenizer = AutoTokenizer.from_pretrained(models_dir / "roberta")
     model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        vit_encoder_dir,
+        vit_classifier_dir,
         models_dir / "roberta",  # type: ignore
     )
     # model = VisionTextDualEncoderModel.from_vision_text_pretrained(
@@ -492,7 +495,7 @@ def main():
         return valid_images
 
     if training_args.do_train:
-        if "train" not in dataset:
+        if "tra7in" not in dataset:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
