@@ -22,36 +22,23 @@ and text models:
 Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://huggingface.co/models?filter=clip)
 Text models: BERT, ROBERTa (https://huggingface.co/models?filter=fill-mask)
 """
-import pathlib
-from transformers import (
-    AutoImageProcessor,
-    AutoTokenizer,
-    RobertaForMaskedLM,
-    Trainer,
-    TrainingArguments,
-    VisionTextDualEncoderModel,
-    VisionTextDualEncoderProcessor,
-    ViTImageProcessor,
-    ViTMAEForPreTraining,
-    ViTForImageClassification,
-)
+
 import logging
 import os
+import pathlib
 import sys
 import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
-from torchinfo import summary
-
 import torch
+import transformers
 from datasets import load_dataset
 from PIL import Image
+from torchinfo import summary
 from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
-
-import transformers
 from transformers import (
     AutoImageProcessor,
     AutoModel,
@@ -59,16 +46,19 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    VisionTextDualEncoderModel,
+    ViTForImageClassification,
+    ViTImageProcessor,
+    ViTMAEForPreTraining,
     set_seed,
 )
+from torchmetrics.multimodal import CLIPScore
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-
 logger = logging.getLogger(__name__)
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 @dataclass
@@ -77,26 +67,68 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
+    model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
+    )
+    pretrained_bert_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Path to local BERT or RoBERTa model or model identifier from huggingface.co/models"
+        },
+    )
+    pretrained_mae_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Path to local ViTMAEForPreTraining or ViTMAEForPreTraining identifier from huggingface.co/models"
+        },
+    )
+    vit_classifier_save_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Path to save pretrained ViTForImageClassification to if pretrained MAE ViT is given"
+        },
+    )
+    pretrained_vit_classifier_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Path to pretrained ViTForImageClassification or model identifier from huggingface.co/models"
+        },
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
-    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(
+        default=None, metadata={"help": "Name or path of preprocessor config."}
+    )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from s3"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     token: str = field(
         default=None,
@@ -124,10 +156,12 @@ class ModelArguments:
         },
     )
     freeze_vision_model: bool = field(
-        default=False, metadata={"help": "Whether to freeze the vision model parameters or not."}
+        default=False,
+        metadata={"help": "Whether to freeze the vision model parameters or not."},
     )
     freeze_text_model: bool = field(
-        default=False, metadata={"help": "Whether to freeze the text model parameters or not."}
+        default=False,
+        metadata={"help": "Whether to freeze the text model parameters or not."},
     )
 
 
@@ -138,22 +172,33 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
-    data_dir: Optional[str] = field(default=None, metadata={"help": "The data directory containing input files."})
+    data_dir: Optional[str] = field(
+        default=None, metadata={"help": "The data directory containing input files."}
+    )
     image_column: Optional[str] = field(
         default="image_path",
-        metadata={"help": "The name of the column in the datasets containing the full image file paths."},
+        metadata={
+            "help": "The name of the column in the datasets containing the full image file paths."
+        },
     )
     caption_column: Optional[str] = field(
         default="caption",
-        metadata={"help": "The name of the column in the datasets containing the image captions."},
+        metadata={
+            "help": "The name of the column in the datasets containing the image captions."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines file)."}
+        default=None,
+        metadata={"help": "The input training data file (a jsonlines file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
@@ -191,7 +236,8 @@ class DataTrainingArguments:
         },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -199,15 +245,27 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension == "json", "`validation_file` should be a json file."
@@ -239,8 +297,12 @@ class Transform(torch.nn.Module):
 
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
-    attention_mask = torch.tensor([example["attention_mask"] for example in examples], dtype=torch.long)
+    input_ids = torch.tensor(
+        [example["input_ids"] for example in examples], dtype=torch.long
+    )
+    attention_mask = torch.tensor(
+        [example["attention_mask"] for example in examples], dtype=torch.long
+    )
     return {
         "pixel_values": pixel_values,
         "input_ids": input_ids,
@@ -255,11 +317,15 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -269,7 +335,9 @@ def main():
             FutureWarning,
         )
         if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
         model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
@@ -302,14 +370,20 @@ def main():
 
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -362,9 +436,9 @@ def main():
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
-    elif model_args.model_name_or_path:
+    elif model_args.model_name_or_path or model_args.pretrained_bert_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path,
+            model_args.model_name_or_path or model_args.pretrained_bert_name_or_path,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
             token=model_args.token,
@@ -376,47 +450,65 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
+    if model_args.model_name_or_path:
+        model = AutoModel.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
+        )
+        image_processor = AutoImageProcessor.from_pretrained(
+            model_args.model_name_or_path
+        )
 
-    # model = AutoModel.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     cache_dir=model_args.cache_dir,
-    #     revision=model_args.model_revision,
-    #     token=model_args.token,
-    #     trust_remote_code=model_args.trust_remote_code,
-    # )
-    root_dir = pathlib.Path("/media/jj_data/")
-    models_dir = root_dir / "models"
-    vit_ver = "5"
-    vit_dir = models_dir / "ViT" / vit_ver
-    # vit_pretrained = ViTMAEForPreTraining.from_pretrained(
-    #     models_dir / "ViT" / vit_ver,
-    # )
-
-
-    vit_classifier_dir = models_dir / "ViT_encoder" / vit_ver
-    if not (vit_classifier_dir).exists():
-        vit_im_class = ViTForImageClassification.from_pretrained(vit_dir)
-        vit_classifier_dir.mkdir(parents=True)
-        vit_im_class.save_pretrained(vit_classifier_dir)
-    image_processor = AutoImageProcessor.from_pretrained(vit_dir)
-
-    # image_processor = AutoImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver)
-    tokenizer = AutoTokenizer.from_pretrained(models_dir / "roberta")
-    model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        vit_classifier_dir,
-        models_dir / "roberta",  # type: ignore
-    )
-    # model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-    #     # models_dir / "ViT" / vit_ver, # type: ignore
-    #     vit_encoder_dir,
-    #     models_dir / "roberta",  # type: ignore
-    # )
+    else:
+        if not model_args.pretrained_bert_name_or_path:
+            raise ValueError(
+                "Must pass in a pretrained CLIP model, a directory for a pretrained ViT Classifier or"
+                " both a ViT MAE path <pretrained_mae_name_or_path> and a ViT Classifier save path <vit_classifier_save_path>"
+            )
+        if model_args.pretrained_mae_name_or_path:
+            if not model_args.vit_classifier_save_path:
+                raise ValueError(
+                    "You must pass in a save location for the pretrained autoencoder to be saved"
+                    " as a classifier."
+                )
+            model_args.vit_classifier_save_path = pathlib.Path(
+                model_args.vit_classifier_save_path
+            )
+            if not (model_args.vit_classifier_save_path).exists():
+                vit_im_class = ViTForImageClassification.from_pretrained(
+                    model_args.pretrained_mae_name_or_path
+                )
+                model_args.vit_classifier_save_path.mkdir(parents=True)
+                vit_im_class.save_pretrained(model_args.vit_classifier_save_path)
+            image_processor = AutoImageProcessor.from_pretrained(
+                model_args.pretrained_mae_name_or_path
+            )
+            model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+                str(model_args.vit_classifier_save_path.absolute()),
+                model_args.pretrained_bert_name_or_path,  # type: ignore
+            )
+        elif model_args.pretrained_vit_classifier_name_or_path:
+            image_processor = AutoImageProcessor.from_pretrained(
+                model_args.pretrained_vit_classifier_name_or_path
+            )
+            model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+                model_args.pretrained_vit_classifier_name_or_path,
+                model_args.pretrained_bert_name_or_path,  # type: ignore
+            )
+        else:
+            raise ValueError(
+                "Must pass in a pretrained CLIP model, a directory for a pretrained ViT Classifier or"
+                " both a ViT MAE path <pretrained_mae_name_or_path> and a ViT Classifier save path <vit_classifier_save_path>"
+            )
 
     config = model.config
 
-
     # set seed for torch dataloaders
     set_seed(training_args.seed)
+
     def _freeze_params(module):
         for param in module.parameters():
             param.requires_grad = False
@@ -427,10 +519,6 @@ def main():
     if model_args.freeze_text_model:
         _freeze_params(model.text_model)
 
-    # print(config)
-    # exit()
-
-
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     if training_args.do_train:
@@ -440,13 +528,17 @@ def main():
     elif training_args.do_predict:
         column_names = dataset["test"].column_names
     else:
-        logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
+        logger.info(
+            "There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`."
+        )
         return
 
     # 6. Get the column names for input/target.
     dataset_columns = dataset_name_mapping.get(data_args.dataset_name, None)
     if data_args.image_column is None:
-        image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
+        image_column = (
+            dataset_columns[0] if dataset_columns is not None else column_names[0]
+        )
     else:
         image_column = data_args.image_column
         if image_column not in column_names:
@@ -454,7 +546,9 @@ def main():
                 f"--image_column' value '{data_args.image_column}' needs to be one of: {', '.join(column_names)}"
             )
     if data_args.caption_column is None:
-        caption_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
+        caption_column = (
+            dataset_columns[1] if dataset_columns is not None else column_names[1]
+        )
     else:
         caption_column = data_args.caption_column
         if caption_column not in column_names:
@@ -465,7 +559,9 @@ def main():
     # 7. Preprocessing the datasets.
     # Initialize torchvision transforms and jit it for faster processing.
     image_transformations = Transform(
-        config.vision_config.image_size, image_processor.image_mean, image_processor.image_std
+        config.vision_config.image_size,
+        image_processor.image_mean,
+        image_processor.image_std,
     )
     image_transformations = torch.jit.script(image_transformations)
 
@@ -473,13 +569,21 @@ def main():
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
         captions = list(examples[caption_column])
-        text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
+        text_inputs = tokenizer(
+            captions,
+            max_length=data_args.max_seq_length,
+            padding="max_length",
+            truncation=True,
+        )
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
         return examples
 
     def transform_images(examples):
-        images = [read_image(image_file, mode=ImageReadMode.RGB) for image_file in examples[image_column]]
+        images = [
+            read_image(image_file, mode=ImageReadMode.RGB)
+            for image_file in examples[image_column]
+        ]
         examples["pixel_values"] = [image_transformations(image) for image in images]
         return examples
 
@@ -495,7 +599,7 @@ def main():
         return valid_images
 
     if training_args.do_train:
-        if "tra7in" not in dataset:
+        if "train" not in dataset:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
@@ -503,7 +607,9 @@ def main():
             train_dataset = train_dataset.select(range(max_train_samples))
 
         train_dataset = train_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+            filter_corrupt_images,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
         )
         train_dataset = train_dataset.map(
             function=tokenize_captions,
@@ -526,13 +632,15 @@ def main():
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
         eval_dataset = eval_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+            filter_corrupt_images,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
         )
         eval_dataset = eval_dataset.map(
             function=tokenize_captions,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[col for col in column_names if col != image_column],
+            # remove_columns=[col for col in column_names if col != image_column],
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on validation dataset",
         )
@@ -549,22 +657,21 @@ def main():
             test_dataset = test_dataset.select(range(max_eval_samples))
 
         test_dataset = test_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+            filter_corrupt_images,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
         )
         test_dataset = test_dataset.map(
             function=tokenize_captions,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[col for col in column_names if col != image_column],
+            # remove_columns=[col for col in column_names if col != image_column],
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on test dataset",
         )
 
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         test_dataset.set_transform(transform_images)
-    # print(vit_model(train_dataset[0]["pixel_values"].unsqueeze(0))["last_hidden_state"].shape)
-    # print(model)
-    # exit()
     # 8. Initialize our trainer
     trainer = Trainer(
         model=model,
@@ -573,7 +680,6 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         data_collator=collate_fn,
     )
-
     # 9. Training
     if training_args.do_train:
         checkpoint = None
@@ -589,23 +695,32 @@ def main():
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
 
-    # 10. Evaluation
+    # 10. Evaluation and Testing
     if training_args.do_eval:
         metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
+        trainer.log_metrics("eval", metrics.metrics)
+        trainer.save_metrics("eval", metrics.metrics)
 
+    if training_args.do_predict:
+        metrics = trainer.predict(test_dataset)
+        trainer.log_metrics("test", metrics.metrics)
+        trainer.save_metrics("test", metrics.metrics)
     # 11. Write Training Stats and push to hub.
     finetuned_from = model_args.model_name_or_path
     # If from a local directory, don't set `finetuned_from` as this is required to be a valid repo. id on the Hub.
     if os.path.isdir(finetuned_from):
         finetuned_from = None
-    kwargs = {"finetuned_from": finetuned_from, "tasks": "contrastive-image-text-modeling"}
+    kwargs = {
+        "finetuned_from": finetuned_from,
+        "tasks": "contrastive-image-text-modeling",
+    }
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:
             kwargs["dataset_args"] = data_args.dataset_config_name
-            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            kwargs["dataset"] = (
+                f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            )
         else:
             kwargs["dataset"] = data_args.dataset_name
 
