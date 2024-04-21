@@ -1,3 +1,4 @@
+from dataset import NFLDataModule
 import multiprocessing as mp
 import pathlib
 import time
@@ -13,8 +14,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
-
 data_dir = pathlib.Path(__file__).parents[1] / "data"
+
 TEAM_MAP = pd.read_parquet(data_dir / "team_id_map.parquet").to_dict()["category"]
 TEAM_MAP[-1] = "football"
 REV_TEAM_MAP = {name: idx for idx, name in TEAM_MAP.items()}
@@ -186,20 +187,11 @@ def animate_play_tensor(dataloader_input, save_loc):
             writer=animation.FFMpegWriter(fps=10, codec="h264"),
         )
 
-
-if __name__ == "__main__":
-    from dataset import NFLDataModule
-
-    # for i, data in enumerate(dataloader):
-    #     animate_with_saveloc(data)
-    #     if i == 3:
-    #         print(f"Time to write images: {time.perf_counter() - start:.2f}")
-    #         exit()
+def prepare_mp4s():
     mp.set_start_method("spawn")
 
     for which in ("val", "test", "train"):
         save_loc = data_dir / which / "mp4_data"
-        team_names = pd.read_parquet(data_dir / which / "team_id_map.parquet")
         if not save_loc.exists():
             save_loc.mkdir()
         dmod = NFLDataModule(data_dir)
@@ -212,3 +204,12 @@ if __name__ == "__main__":
         with Pool(worker_count) as p:
             p.map(animate_with_saveloc, dataloader)
         print(f"Time to write images: {time.perf_counter() - start:.2f}")
+
+
+if __name__ == "__main__":
+    prepare_mp4s()
+    # for i, data in enumerate(dataloader):
+    #     animate_with_saveloc(data)
+    #     if i == 3:
+    #         print(f"Time to write images: {time.perf_counter() - start:.2f}")
+    #         exit()

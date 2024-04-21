@@ -2,22 +2,24 @@ python og_train.py \
     --dataset_name /media/jj_data/data/CLIP \
     --dataset_config_name image_only \
     --image_column_name pixel_values \
-    --output_dir /home/jackmorris/football/football2text/models/ViT/3 \
+    --output_dir /media/jj_data/models/ViT/5 \
     --mask_ratio 0.50 \
     --norm_pix_loss \
     --do_train \
     --do_eval \
+    --remove_unused_columns False \
     --base_learning_rate 1.5e-4 \
     --lr_scheduler_type cosine \
     --weight_decay 0.05 \
-    --num_train_epochs 10 \
+    --num_train_epochs 5  \
     --warmup_ratio 0.05 \
     --per_device_train_batch_size 150 \
-    --per_device_eval_batch_size 200 \
+    --per_device_eval_batch_size 50 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
-    --save_strategy epoch \
-    --load_best_model_at_end True \
+    --evaluation_strategy steps \
+    --eval_steps 500 \
+    --save_strategy steps \
     --save_total_limit 3 \
+    --dataloader_num_workers 4 \
     --seed 1337 \

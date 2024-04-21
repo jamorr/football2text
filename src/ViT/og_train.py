@@ -36,7 +36,6 @@ from transformers import (
     ViTMAEForPreTraining,
 )
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
 
 
 """ Pre-training a 🤗 ViT model as an MAE (masked autoencoder), as proposed in https://arxiv.org/abs/2111.06377."""
@@ -187,9 +186,6 @@ def main():
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         model_args.token = model_args.use_auth_token
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_mae", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -335,11 +331,6 @@ def main():
         return examples
 
 
-    # def preprocess_images(examples):
-    #     """Preprocess a batch of images by applying transforms."""
-
-    #     examples["pixel_values"] = [transforms(image) for image in examples[image_column_name]]
-    #     return examples
 
     if training_args.do_train:
         if "train" not in ds:
@@ -401,10 +392,7 @@ def main():
         "dataset": data_args.dataset_name,
         "tags": ["masked-auto-encoding"],
     }
-    if training_args.push_to_hub:
-        trainer.push_to_hub(**kwargs)
-    else:
-        trainer.create_model_card(**kwargs)
+    trainer.create_model_card(**kwargs)
 
 
 def _mp_fn(index):
