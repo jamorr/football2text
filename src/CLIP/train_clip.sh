@@ -13,7 +13,6 @@ python run_clip.py \
     --warmup_steps 0 \
     --num_train_epochs 7 \
     --weight_decay 0.1 \
-    --overwrite_output_dir \
     --logging_strategy steps \
     --logging_steps 10 \
     --save_strategy steps \

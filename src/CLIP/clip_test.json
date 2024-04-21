@@ -1,0 +1,16 @@
+{
+    "output_dir": "/media/jj_data/models/CLIP/3/test_res",
+    "model_name_or_path": "/media/jj_data/models/CLIP/3",
+    "dataset_name": "/media/jj_data/data/CLIP",
+    "dataset_config_name": "main",
+    "image_column": "pixel_values",
+    "caption_column": "input_ids",
+    "remove_unused_columns": true,
+    "do_predict": true,
+    "freeze_vision_model": true,
+    "per_device_eval_batch_size": 300,
+    "eval_accumulation_steps":10,
+    "dataloader_num_workers": 4,
+    "prediction_loss_only":true,
+    "metric_for_best_model":"loss"
+}

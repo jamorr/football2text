@@ -74,24 +74,6 @@ class NFLImageDataset(Dataset):
             self.loaded_frames = [
                 (frame, str((self.data_dir/"jpeg_data"/f'{tup.gameId}'/f'{tup.playId}'/f'{frame_id}.jpeg').absolute()))
                 for frame_id, frame in enumerate(frames)]
-            # for frame_id, frame in enumerate(frames):
-            #     sloc = str()
-            #     print(sloc)
-            #     print(frame.dtype)
-            #     exit()
-            #     write_jpeg(frame, sloc, quality=90)
-        # default batchsize is 30
-        # idx = index*self.batch_size
-        # plays = self.tracking_weeks.iloc[idx:idx+40]
-        # fstack = torch.zeros((self.batch_size, self.img_size, self.img_size, 3))
-        # num_frames = 0
-        # for tup in plays.itertuples(False):
-        #     file_path = self.data_dir/"mp4_data"/f'{tup.gameId}-{tup.playId}.mp4'
-        #     frames, *_ = read_video(str(file_path.absolute()),end_pts=tup.frameId)
-        #     num_frames += len(frames)
-        #     fstack[0:tup.frameId] = frames
-        # assert num_frames == self.batch_size
-        # return fstack
 
     def __getitem__(self, index) -> Any:
         if index < self.last_index:
@@ -116,16 +98,8 @@ class NFLJPEGDataset(Dataset):
         self.data_dir:pathlib.Path = data_path
         self.img_path:pathlib.Path = data_path / "jpeg_data"
         self.img_list = list(self.img_path.glob("*.jpeg"))
-        self.image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
 
-        #     self.tfms = transforms.Compose([
-        #     transforms.ToPILImage(),
-        #     transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
-        #     transforms.CenterCrop(224),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(
         #         (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-        # ])
     def __len__(self):
         return len(self.img_list)
 
