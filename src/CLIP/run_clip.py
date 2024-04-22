@@ -700,8 +700,8 @@ def main():
     # 10. Evaluation and Testing
     if training_args.do_eval:
         metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics.metrics)
-        trainer.save_metrics("eval", metrics.metrics)
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
     if training_args.do_predict:
         metrics = trainer.predict(test_dataset)

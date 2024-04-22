@@ -1,6 +1,6 @@
 {
-    "output_dir": "/media/jj_data/models/CLIP/3/test_res",
-    "model_name_or_path": "/media/jj_data/models/CLIP/3",
+    "output_dir": "/media/jj_data/models/CLIP/text_freeze1/test_res",
+    "model_name_or_path": "/media/jj_data/models/CLIP/text_freeze1",
     "dataset_name": "/media/jj_data/data/CLIP",
     "dataset_config_name": "main",
     "image_column": "pixel_values",
