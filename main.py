@@ -2,12 +2,12 @@ import argparse
 import os
 import pathlib
 from src.dataset import NFLDataModule
-from src.data2mp4 import
+from src.data2mp4 import prepare_mp4s
 
 data_path = pathlib.Path("/data")
 models_path = pathlib.Path("/media/jj_data/models")
 def main():
-    parser = argparse.ArgumentParser(description='FMMT Recreation')
+    parser = argparse.ArgumentParser(description='CLIP for football')
     #----------------------------------------------Sys Args--------------------------------------------------
     parser.add_argument('--data-path', dest='data_dir', type=str, default=data_path)
     parser.add_argument('--checkpoint-path', dest='check_path',type=str, default=None, help='Location of checkpoint to use or ')

@@ -15,7 +15,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_callback import TrainerCallback
 from transformers.trainer_utils import EvalPrediction
-from clip_gpt2_model import ClipCaptionModel, ClipCaptionPrefix, MappingType
+from football.football2text.src.CLIPCap.clipcap_model import ClipCaptionModel, ClipCaptionPrefix, MappingType
 from datasets import load_dataset
 from PIL import Image
 from torchvision.io import ImageReadMode, read_image

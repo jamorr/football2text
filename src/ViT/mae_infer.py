@@ -6,43 +6,38 @@ import numpy as np
 import torch
 from dataset import NFLJPEGDataset
 from matplotlib.axes import Axes
-from torchvision.transforms import (
-    Compose,
-    Lambda,
-    Normalize,
-    RandomHorizontalFlip,
-    RandomResizedCrop,
-    ToTensor,
-)
-from torchvision.transforms.functional import InterpolationMode
 from transformers import (
     ViTImageProcessor,
     ViTMAEForPreTraining,
 )
 
 # make the plt figure larger
-plt.rcParams['figure.figsize'] = [20, 5]
+plt.rcParams["figure.figsize"] = [20, 5]
 
-def show_image(image, title, ax:Axes):
+
+def show_image(image, title, ax: Axes):
     # image is [H, W, 3]
     assert image.shape[2] == 3
     ax.imshow(torch.clip((image * imagenet_std + imagenet_mean) * 255, 0, 255).int())
     ax.set_title(title, fontsize=16)
-    ax.axis('off')
+    ax.axis("off")
+
 
 def visualize(pixel_values, model, save_loc):
     # forward pass
     outputs = model(pixel_values)
     y = model.unpatchify(outputs.logits)
-    y = torch.einsum('nchw->nhwc', y).detach().cpu()
+    y = torch.einsum("nchw->nhwc", y).detach().cpu()
 
     # visualize the mask
     mask = outputs.mask.detach()
-    mask = mask.unsqueeze(-1).repeat(1, 1, model.config.patch_size**2 *3)  # (N, H*W, p*p*3)
+    mask = mask.unsqueeze(-1).repeat(
+        1, 1, model.config.patch_size**2 * 3
+    )  # (N, H*W, p*p*3)
     mask = model.unpatchify(mask)  # 1 is removing, 0 is keeping
-    mask = torch.einsum('nchw->nhwc', mask).detach().cpu()
+    mask = torch.einsum("nchw->nhwc", mask).detach().cpu()
 
-    x = torch.einsum('nchw->nhwc', pixel_values)
+    x = torch.einsum("nchw->nhwc", pixel_values)
 
     # masked image
     im_masked = x * (1 - mask)
@@ -50,14 +45,14 @@ def visualize(pixel_values, model, save_loc):
     # MAE reconstruction pasted with visible patches
     im_paste = x * (1 - mask) + y * mask
 
-
     fig, axes = plt.subplots(1, 4, layout="constrained")
 
     show_image(x[0], "original", axes[0])
-    show_image(im_masked[0], "masked",axes[1])
+    show_image(im_masked[0], "masked", axes[1])
     show_image(y[0], "reconstruction", axes[2])
     show_image(im_paste[0], "reconstruction + visible", axes[3])
     fig.savefig(save_loc)
+
 
 def main(args):
     version_num, checkpoint_name = args.version_num, args.checkpoint_name
@@ -76,8 +71,7 @@ def main(args):
     global imagenet_mean, imagenet_std
     imagenet_mean = np.array(image_processor.image_mean)
     imagenet_std = np.array(image_processor.image_std)
-    data_dir = root_dir/"data"/which
-
+    data_dir = root_dir / "data" / which
 
     # image_processor = ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base")
     dset = NFLJPEGDataset(data_dir)
@@ -85,12 +79,19 @@ def main(args):
     # feature_extractor = vit_pretrained.vit
     idx = np.random.randint(0, len(dset))
 
-    visualize(image_processor(dset[idx], return_tensors="pt").pixel_values, vit_pretrained, save_loc=vis_save_dir/f"test{timestamp}-v.{version_num}.{checkpoint_name}.jpeg")
+    visualize(
+        image_processor(dset[idx], return_tensors="pt").pixel_values,
+        vit_pretrained,
+        save_loc=vis_save_dir
+        / f"test{timestamp}-v.{version_num}.{checkpoint_name}.jpeg",
+    )
+
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
+
     parser = ArgumentParser()
-    parser.add_argument("-v", dest="version_num", default='5')
+    parser.add_argument("-v", dest="version_num", default="5")
     parser.add_argument("-c", dest="checkpoint_name", default=None)
     args = parser.parse_args()
 

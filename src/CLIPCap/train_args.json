@@ -18,7 +18,7 @@
     "eval_delay": 0,
     "logging_strategy": "steps",
     "logging_steps": 10,
-    "save_safetensors":false,
+    "save_safetensors": false,
     "save_strategy": "steps",
     "save_total_limit": 2,
     "dataloader_num_workers": 16,
