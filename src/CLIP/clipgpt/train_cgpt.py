@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import dataclass, field
 import json
 import os
 import pickle
@@ -16,365 +17,227 @@ from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
 from tqdm import tqdm
+from torch.optim import  AdamW
 from transformers import (
-    AdamW,
     GPT2LMHeadModel,
     GPT2Tokenizer,
     ViTImageProcessor,
     get_linear_schedule_with_warmup,
-    AutoModel
+    AutoModel,
+    Trainer,
+    HfArgumentParser,
+    TrainingArguments,
 )
+from clip_gpt2_model import ClipCaptionModel, ClipCaptionPrefix, MappingType
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-
-class MappingType(Enum):
-    MLP = "mlp"
-    Transformer = "transformer"
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
-class ClipCocoDataset(Dataset):
-    def __len__(self) -> int:
-        return len(self.captions_tokens)
+@dataclass
+class ModelArguments:
+    """
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
+    """
 
-    def pad_tokens(self, item: int):
-        tokens = self.captions_tokens[item]
-        padding = self.max_seq_len - tokens.shape[0]
-        if padding > 0:
-            tokens = torch.cat((tokens, torch.zeros(padding, dtype=torch.int64) - 1))
-            self.captions_tokens[item] = tokens
-        elif padding < 0:
-            tokens = tokens[: self.max_seq_len]
-            self.captions_tokens[item] = tokens
-        mask = tokens.ge(0)  # mask is zero where we out of sequence
-        tokens[~mask] = 0
-        mask = mask.float()
-        mask = torch.cat(
-            (torch.ones(self.prefix_length), mask), dim=0
-        )  # adding prefix mask
-        return tokens, mask
+    model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
+    )
+    pretrained_clip_name_or_path: Optional[str] = field(
+        default="/media/jj_data/models/CLIP/text_freeze1",
+        metadata={
+            "help": "Path to pretrained ViTForImageClassification or model identifier from huggingface.co/models"
+        },
+    )
+    pretrained_gpt2_name_or_path: Optional[str] = field(
+        default="gpt2",
+        metadata={
+            "help": "Path to pretrained ViTForImageClassification or model identifier from huggingface.co/models"
+        },
+    )
+    config_name: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
+    )
+    tokenizer_name: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
+    )
+    image_processor_name_or_path: str = field(
+        default=None, metadata={"help": "Name or path of preprocessor config."}
+    )
+    cache_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from s3"
+        },
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
+    )
+    use_fast_tokenizer: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
+    )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
+    max_seq_len:Optional[int] = field(
+        default=128,
+        metadata={"help":"maximum length of a sequence"}
+    )
+    prefix_length:Optional[int] = field(
+        default=10,
+        metadata={"help":"maximum length of prefix sequence"}
+    )
+    prefix_length_clip:Optional[int] = field(
+        default=10,
+        metadata={"help":"maximum length of prefix sequence"}
+    )
+    prefix_dim:Optional[int] = field(
+        default=512,
+        metadata={"help":"maximum length of a sequence"}
+    )
+    num_layers:Optional[int] = field(
+        default=8,
+        metadata={"help":"MLP layers in projection from clip to GPT2"}
+    )
+    mapping_type:Optional[str] = field(
+        default="mlp",
+        metadata={"help":"What kind of layers to use for projection"}
 
-    def __getitem__(self, item: int) -> Tuple[torch.Tensor, ...]:
-        tokens, mask = self.pad_tokens(item)
-        prefix = self.prefixes[self.caption2embedding[item]]
-        if self.normalize_prefix:
-            prefix = prefix.float()
-            prefix = prefix / prefix.norm(2, -1)
-        return tokens, mask, prefix
+    )
+    only_prefix: Optional[bool] = field(
+        default=False
+    )
+@dataclass
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+    """
 
-    def __init__(
-        self,
-        data_path: str,
-        prefix_length: int,
-        gpt2_type: str = "gpt2",
-        normalize_prefix=False,
-    ):
-        self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
-        self.prefix_length = prefix_length
-        self.normalize_prefix = normalize_prefix
-        with open(data_path, "rb") as f:
-            all_data = pickle.load(f)
-        print("Data size is %0d" % len(all_data["clip_embedding"]))
-        sys.stdout.flush()
-        self.prefixes = all_data["clip_embedding"]
-        captions_raw = all_data["captions"]
-        self.image_ids = [caption["image_id"] for caption in captions_raw]
-        self.captions = [caption["caption"] for caption in captions_raw]
-        if os.path.isfile(f"{data_path[:-4]}_tokens.pkl"):
-            with open(f"{data_path[:-4]}_tokens.pkl", "rb") as f:
-                self.captions_tokens, self.caption2embedding, self.max_seq_len = (
-                    pickle.load(f)
-                )
-        else:
-            self.captions_tokens = []
-            self.caption2embedding = []
-            max_seq_len = 0
-            for caption in captions_raw:
-                self.captions_tokens.append(
-                    torch.tensor(
-                        self.tokenizer.encode(caption["caption"]), dtype=torch.int64
-                    )
-                )
-                self.caption2embedding.append(caption["clip_embedding"])
-                max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
-            # self.max_seq_len = max_seq_len
-            with open(f"{data_path[:-4]}_tokens.pkl", "wb") as f:
-                pickle.dump(
-                    [self.captions_tokens, self.caption2embedding, max_seq_len], f
-                )
-        all_len = torch.tensor(
-            [len(self.captions_tokens[i]) for i in range(len(self))]
-        ).float()
-        self.max_seq_len = min(
-            int(all_len.mean() + all_len.std() * 10), int(all_len.max())
-        )
+    dataset_name: Optional[str] = field(
+        default="/media/jj_data/data/CLIP",
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
+    )
+    dataset_config_name: Optional[str] = field(
+        default="main",
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
+    )
+    data_dir: Optional[str] = field(
+        default=None, metadata={"help": "The data directory containing input files."}
+    )
+    image_column: Optional[str] = field(
+        default="pixel_values",
+        metadata={
+            "help": "The name of the column in the datasets containing the full image file paths."
+        },
+    )
+    caption_column: Optional[str] = field(
+        default="input_ids",
+        metadata={
+            "help": "The name of the column in the datasets containing the image captions."
+        },
+    )
+    train_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "The input training data file (a jsonlines file)."},
+    )
+    validation_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
+    )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input testing data file (a jsonlines file)."},
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
+        },
+    )
+    max_eval_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
+    )
+    preprocess_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
+    )
 
-
-class MLP(nn.Module):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
-
-    def __init__(self, sizes: Tuple[int, ...], bias=True, act=nn.Tanh):
-        super(MLP, self).__init__()
-        layers = []
-        for i in range(len(sizes) - 1):
-            layers.append(nn.Linear(sizes[i], sizes[i + 1], bias=bias))
-            if i < len(sizes) - 2:
-                layers.append(act())
-        self.model = nn.Sequential(*layers)
-
-
-class MlpTransformer(nn.Module):
-    def __init__(
-        self, in_dim, h_dim, out_d: Optional[int] = None, act=nnf.relu, dropout=0.0
-    ):
-        super().__init__()
-        out_d = out_d if out_d is not None else in_dim
-        self.fc1 = nn.Linear(in_dim, h_dim)
-        self.act = act
-        self.fc2 = nn.Linear(h_dim, out_d)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = self.dropout(x)
-        return x
-
-
-class MultiHeadAttention(nn.Module):
-    def __init__(self, dim_self, dim_ref, num_heads, bias=True, dropout=0.0):
-        super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim_self // num_heads
-        self.scale = head_dim**-0.5
-        self.to_queries = nn.Linear(dim_self, dim_self, bias=bias)
-        self.to_keys_values = nn.Linear(dim_ref, dim_self * 2, bias=bias)
-        self.project = nn.Linear(dim_self, dim_self)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, y=None, mask=None):
-        y = y if y is not None else x
-        b, n, c = x.shape
-        _, m, d = y.shape
-        # b n h dh
-        queries = self.to_queries(x).reshape(b, n, self.num_heads, c // self.num_heads)
-        # b m 2 h dh
-        keys_values = self.to_keys_values(y).reshape(
-            b, m, 2, self.num_heads, c // self.num_heads
-        )
-        keys, values = keys_values[:, :, 0], keys_values[:, :, 1]
-        attention = torch.einsum("bnhd,bmhd->bnmh", queries, keys) * self.scale
-        if mask is not None:
-            if mask.dim() == 2:
-                mask = mask.unsqueeze(1)
-            attention = attention.masked_fill(mask.unsqueeze(3), float("-inf"))
-        attention = attention.softmax(dim=2)
-        out = torch.einsum("bnmh,bmhd->bnhd", attention, values).reshape(b, n, c)
-        out = self.project(out)
-        return out, attention
-
-
-class TransformerLayer(nn.Module):
-    def forward_with_attention(self, x, y=None, mask=None):
-        x_, attention = self.attn(self.norm1(x), y, mask)
-        x = x + x_
-        x = x + self.mlp(self.norm2(x))
-        return x, attention
-
-    def forward(self, x, y=None, mask=None):
-        x = x + self.attn(self.norm1(x), y, mask)[0]
-        x = x + self.mlp(self.norm2(x))
-        return x
-
-    def __init__(
-        self,
-        dim_self,
-        dim_ref,
-        num_heads,
-        mlp_ratio=4.0,
-        bias=False,
-        dropout=0.0,
-        act=nnf.relu,
-        norm_layer: nn.Module = nn.LayerNorm,
-    ):
-        super().__init__()
-        self.norm1 = norm_layer(dim_self)
-        self.attn = MultiHeadAttention(
-            dim_self, dim_ref, num_heads, bias=bias, dropout=dropout
-        )
-        self.norm2 = norm_layer(dim_self)
-        self.mlp = MlpTransformer(
-            dim_self, int(dim_self * mlp_ratio), act=act, dropout=dropout
-        )
-
-
-class Transformer(nn.Module):
-    def forward_with_attention(self, x, y=None, mask=None):
-        attentions = []
-        for layer in self.layers:
-            x, att = layer.forward_with_attention(x, y, mask)
-            attentions.append(att)
-        return x, attentions
-
-    def forward(self, x, y=None, mask=None):
-        for i, layer in enumerate(self.layers):
-            if i % 2 == 0 and self.enc_dec:  # cross
-                x = layer(x, y)
-            elif self.enc_dec:  # self
-                x = layer(x, x, mask)
-            else:  # self or cross
-                x = layer(x, y, mask)
-        return x
-
-    def __init__(
-        self,
-        dim_self: int,
-        num_heads: int,
-        num_layers: int,
-        dim_ref: Optional[int] = None,
-        mlp_ratio: float = 2.0,
-        act=nnf.relu,
-        norm_layer: nn.Module = nn.LayerNorm,
-        enc_dec: bool = False,
-    ):
-        super(Transformer, self).__init__()
-        dim_ref = dim_ref if dim_ref is not None else dim_self
-        self.enc_dec = enc_dec
-        if enc_dec:
-            num_layers = num_layers * 2
-        layers = []
-        for i in range(num_layers):
-            if i % 2 == 0 and enc_dec:  # cross
-                layers.append(
-                    TransformerLayer(
-                        dim_self,
-                        dim_ref,
-                        num_heads,
-                        mlp_ratio,
-                        act=act,
-                        norm_layer=norm_layer,
-                    )
-                )
-            elif enc_dec:  # self
-                layers.append(
-                    TransformerLayer(
-                        dim_self,
-                        dim_self,
-                        num_heads,
-                        mlp_ratio,
-                        act=act,
-                        norm_layer=norm_layer,
-                    )
-                )
-            else:  # self or cross
-                layers.append(
-                    TransformerLayer(
-                        dim_self,
-                        dim_ref,
-                        num_heads,
-                        mlp_ratio,
-                        act=act,
-                        norm_layer=norm_layer,
-                    )
-                )
-        self.layers = nn.ModuleList(layers)
-
-
-class TransformerMapper(nn.Module):
-    def forward(self, x):
-        x = self.linear(x).view(x.shape[0], self.clip_length, -1)
-        prefix = self.prefix_const.unsqueeze(0).expand(
-            x.shape[0], *self.prefix_const.shape
-        )
-        prefix = torch.cat((x, prefix), dim=1)
-        out = self.transformer(prefix)[:, self.clip_length :]
-        return out
-
-    def __init__(
-        self,
-        dim_clip: int,
-        dim_embedding: int,
-        prefix_length: int,
-        clip_length: int,
-        num_layers: int = 8,
-    ):
-        super(TransformerMapper, self).__init__()
-        self.clip_length = clip_length
-        self.transformer = Transformer(dim_embedding, 8, num_layers)
-        self.linear = nn.Linear(dim_clip, clip_length * dim_embedding)
-        self.prefix_const = nn.Parameter(
-            torch.randn(prefix_length, dim_embedding), requires_grad=True
-        )
-
-
-class ClipCaptionModel(nn.Module):
-
-    def __init__(
-        self,
-        prefix_length: int,
-        clip_length: Optional[int] = None,
-        prefix_size: int = 512,
-        num_layers: int = 8,
-        mapping_type: MappingType = MappingType.MLP,
-    ):
-        super(ClipCaptionModel, self).__init__()
-        self.prefix_length = prefix_length
-        self.gpt = GPT2LMHeadModel.from_pretrained("gpt2")
-        self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
-        if mapping_type == MappingType.MLP:
-            self.clip_project = MLP(
-                (
-                    prefix_size,
-                    (self.gpt_embedding_size * prefix_length) // 2,
-                    self.gpt_embedding_size * prefix_length,
-                )
+    def __post_init__(self):
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
             )
         else:
-            self.clip_project = TransformerMapper(
-                prefix_size,
-                self.gpt_embedding_size,
-                prefix_length,
-                clip_length,
-                num_layers,
-            )
-
-    def get_dummy_token(self, batch_size: int, device: torch.device) -> torch.Tensor:
-        return torch.zeros(
-            batch_size, self.prefix_length, dtype=torch.int64, device=device
-        )
-
-    def forward(
-        self,
-        tokens: torch.Tensor,
-        prefix: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-    ):
-        # print(tokens)
-        # exit()
-        embedding_text = self.gpt.transformer.wte(tokens)
-        prefix_projections = self.clip_project(prefix).view(
-            -1, self.prefix_length, self.gpt_embedding_size
-        )
-        embedding_cat = torch.cat((prefix_projections, embedding_text), dim=1)
-        if labels is not None:
-            dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
-            labels = torch.cat((dummy_token, tokens), dim=1)
-        out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
-        return out
-
-
-
-class ClipCaptionPrefix(ClipCaptionModel):
-    def parameters(self, recurse: bool = True):
-        return self.clip_project.parameters()
-
-    def train(self, mode: bool = True):
-        super(ClipCaptionPrefix, self).train(mode)
-        self.gpt.eval()
-        return self
+            if self.train_file is not None:
+                extension = self.train_file.split(".")[-1]
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
+            if self.validation_file is not None:
+                extension = self.validation_file.split(".")[-1]
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
+            if self.validation_file is not None:
+                extension = self.validation_file.split(".")[-1]
+                assert extension == "json", "`validation_file` should be a json file."
 
 
 def save_config(args: argparse.Namespace):
@@ -386,158 +249,43 @@ def save_config(args: argparse.Namespace):
         json.dump(config, outfile)
 
 
-def load_model(config_path: str, epoch_or_latest: Union[str, int] = "_latest"):
-    with open(config_path) as f:
-        config = json.load(f)
-    parser = argparse.ArgumentParser()
-    parser.set_defaults(**config)
-    args = parser.parse_args()
-    if isinstance(epoch_or_latest, int):
-        epoch_or_latest = f"-{epoch_or_latest:03d}"
-    model_path = os.path.join(args.out_dir, f"{args.prefix}{epoch_or_latest}.pt")
-    if args.only_prefix:
-        model = ClipCaptionPrefix(args.prefix_length)
-    else:
-        model = ClipCaptionModel(args.prefix_length)
-    if os.path.isfile(model_path):
-        print(f"loading model from {model_path}")
-        model.load_state_dict(torch.load(model_path, map_location=torch.device("cuda")))
-    else:
-        print(f"{model_path} is not exist")
-    return model, parser
-
-
-def train(
-    dataset: ClipCocoDataset,
-    model: ClipCaptionModel,
-    args,
-    lr: float = 2e-5,
-    warmup_steps: int = 5000,
-    output_dir: str = ".",
-    output_prefix: str = "",
-    collate_fn=None,
-):
-    device = torch.device("cuda")
-    # device = torch.device('cuda:0')
-    batch_size = args.bs
-    epochs = args.epochs
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    model = model.to(device)
-    model.train()
-    optimizer = AdamW(model.parameters(), lr=lr)
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        drop_last=True,
-        collate_fn=collate_fn,
-    )
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=warmup_steps,
-        num_training_steps=epochs * len(train_dataloader),
-    )
-    # save_config(args)
-    for epoch in range(epochs):
-        print(f">>> Training epoch {epoch}")
-        sys.stdout.flush()
-        progress = tqdm(total=len(train_dataloader), desc=output_prefix, colour="red")
-        for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
-            model.zero_grad()
-
-            tokens, mask, prefix = (
-                tokens.to(device),
-                mask.to(device),
-                prefix.to(device, dtype=torch.float32),
-            )
-            outputs = model(tokens, prefix, mask)
-            logits = outputs.logits[:, args.prefix_length - 1 : -1]
-            loss = nnf.cross_entropy(
-                logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0
-            )
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            progress.set_postfix({"loss": loss.item()})
-            progress.update()
-            if (idx + 1) % 10000 == 0:
-                torch.save(
-                    model.state_dict(),
-                    os.path.join(output_dir, f"{output_prefix}_latest.pt"),
-                )
-        progress.close()
-        if epoch % args.save_every == 0 or epoch == epochs - 1:
-            torch.save(
-                model.state_dict(),
-                os.path.join(output_dir, f"{output_prefix}-{epoch:03d}.pt"),
-            )
-    return model
-
 
 def main():
-    dataset = load_dataset("/media/jj_data/data/CLIP", name="main")
-    # exit()
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--data", default="/media/jj_data/data/CLIP/train/text_image.parquet"
-    )
-    parser.add_argument("--out_dir", default="/media/jj_data/models/GPT/checkpoints")
-    parser.add_argument(
-        "--prefix", default="football_prefix", help="prefix for saved filenames"
-    )
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--save_every", type=int, default=1)
-    parser.add_argument("--do_eval", type=bool, default=False)
-    parser.add_argument("--do_predict", type=bool, default=False)
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments)) #type:ignore
 
-    parser.add_argument("--dataset", type=str, default="/media/jj_data/data/CLIP")
-    parser.add_argument("--dataset_config", type=str, default="main")
-    parser.add_argument("--prefix_length", type=int, default=10)
-    parser.add_argument("--prefix_length_clip", type=int, default=10)
-    parser.add_argument("--bs", type=int, default=40)
-    parser.add_argument("--only_prefix", dest="only_prefix", action="store_true")
-    parser.add_argument(
-        "--mapping_type", type=str, default="mlp", help="mlp/transformer"
-    )
-    parser.add_argument("--num_layers", type=int, default=8)
-    parser.add_argument("--is_rn", dest="is_rn", action="store_true")
-    parser.add_argument(
-        "--normalize_prefix", dest="normalize_prefix", action="store_true"
-    )
-    parser.add_argument("--num_workers", default=4)
-    parser.add_argument("--overwrite_cache", default=False)
-    parser.add_argument("--max_train_samples", default=None)
-    parser.add_argument("--max_eval_samples", default=None)
-    parser.add_argument("--max_seq_length", default=128)
-    parser.add_argument("--collate_fn", type=str, default=None)
-    parser.add_argument("--pretrained_clip_name_or_path", type=str, default="/media/jj_data/models/CLIP/text_freeze")
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        # If we pass only one argument to the script and it's the path to a json file,
+        # let's parse it to get our arguments.
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
+    else:
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    args = parser.parse_args()
-    prefix_length = args.prefix_length
-    dataset = load_dataset(args.dataset, name=args.dataset_config)
+    # args = parser.parse_args()
+    # prefix_length = args.prefix_length
+    dataset = load_dataset(data_args.dataset_name, name=data_args.dataset_config_name)
 
     gpt2tokenizer:GPT2Tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     # gpt2tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
-    clip_model = AutoModel.from_pretrained(args.pretrained_clip_name_or_path)
+    clip_model = AutoModel.from_pretrained(model_args.pretrained_clip_name_or_path)
 
     # Jack Dataset
     # ----------------------------------------------------------------------------------------------------------------------------------#
-    image_column = "pixel_values"
-    description_column = "input_ids"
+    image_column = data_args.image_column
+    description_column = data_args.caption_column
 
     def pad_tokens(tokens):
-        padding = args.max_seq_length - len(tokens)
+        padding = model_args.max_seq_len - len(tokens)
         if padding > 0:
             tokens = torch.cat((torch.tensor(tokens), torch.zeros(padding, dtype=torch.int64) - 1))
         elif padding < 0:
-            tokens = tokens[:args.max_seq_length]
+            tokens = tokens[:model_args.max_seq_len]
         mask = tokens.ge(0)  # mask is zero where we out of sequence
         tokens[~mask] = 0
         mask = mask.float()
         mask = torch.cat(
-            (torch.ones(args.prefix_length), mask), dim=0
+            (torch.ones(model_args.prefix_length), mask), dim=0
         )  # adding prefix mask
         return tokens, mask
 
@@ -545,7 +293,7 @@ def main():
         captions = list(examples[description_column])
         text_inputs = gpt2tokenizer(
             captions,
-            max_length=args.max_seq_length,
+            max_length=model_args.max_seq_len,
             truncation=True,
         )
         input_ids, attention_mask = list(zip(*[pad_tokens(ids) for ids in text_inputs.input_ids]))
@@ -570,8 +318,7 @@ def main():
                 x = self.transforms(x)
             return x
 
-    vit_encoder_dir = "/media/jj_data/models/ViT/5"
-    image_processor = ViTImageProcessor.from_pretrained(vit_encoder_dir)
+    image_processor = ViTImageProcessor.from_pretrained(model_args.image_processor_name_or_path)
 
     image_transformations = Transform(
         224,
@@ -598,44 +345,44 @@ def main():
             except Exception:
                 valid_images.append(False)
         return valid_images
+    if training_args.do_train:
+        train_dataset = dataset["train"]
+        if data_args.max_train_samples is not None:
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
+        train_dataset = train_dataset.filter(
+            filter_corrupt_images,
+            batched=True,
+            num_proc=data_args.preprocess_num_workers,
+        )
+        train_dataset = train_dataset.map(
+            function=tokenize_captions,
+            batched=True,
+            # remove_columns=[col for col in column_names if col != image_column],
+            num_proc=data_args.preprocess_num_workers,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
+        )
+        # Transform images on the fly as doing it on the whole dataset takes too much time.
+        train_dataset.set_transform(transform_images)
 
-    train_dataset = dataset["train"]
-    if args.max_train_samples is not None:
-        max_train_samples = min(len(train_dataset), args.max_train_samples)
-        train_dataset = train_dataset.select(range(max_train_samples))
-    train_dataset = train_dataset.filter(
-        filter_corrupt_images,
-        batched=True,
-        num_proc=args.num_workers,
-    )
-    train_dataset = train_dataset.map(
-        function=tokenize_captions,
-        batched=True,
-        # remove_columns=[col for col in column_names if col != image_column],
-        num_proc=args.num_workers,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on train dataset",
-    )
-    # Transform images on the fly as doing it on the whole dataset takes too much time.
-    train_dataset.set_transform(transform_images)
-
-    if args.do_eval:
+    if training_args.do_eval:
         if "validation" not in dataset:
             raise ValueError("--do_eval requires a train validation")
         eval_dataset = dataset["validation"]
-        if args.max_eval_samples is not None:
-            max_eval_samples = min(len(eval_dataset), args.max_eval_samples)
+        if data_args.max_eval_samples is not None:
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
         eval_dataset = eval_dataset.filter(
             filter_corrupt_images,
             batched=True,
-            num_proc=args.num_workers,
+            num_proc=data_args.preprocess_num_workers,
         )
         eval_dataset = eval_dataset.map(
             function=tokenize_captions,
             batched=True,
-            num_proc=args.num_workers,
+            num_proc=data_args.preprocess_num_workers,
             # remove_columns=[col for col in column_names if col != image_column],
             # load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on validation dataset",
@@ -644,25 +391,25 @@ def main():
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         eval_dataset.set_transform(transform_images)
 
-    if args.do_predict:
+    if training_args.do_predict:
         if "test" not in dataset:
             raise ValueError("--do_predict requires a test dataset")
         test_dataset = dataset["test"]
-        if args.max_eval_samples is not None:
-            max_eval_samples = min(len(test_dataset), args.max_eval_samples)
+        if data_args.max_eval_samples is not None:
+            max_eval_samples = min(len(test_dataset), data_args.max_eval_samples)
             test_dataset = test_dataset.select(range(max_eval_samples))
 
         test_dataset = test_dataset.filter(
             filter_corrupt_images,
             batched=True,
-            num_proc=args.num_workers,
+            num_proc=data_args.preprocess_num_workers,
         )
         test_dataset = test_dataset.map(
             function=tokenize_captions,
             batched=True,
-            num_proc=args.num_workers,
+            num_proc=data_args.preprocess_num_workers,
             # remove_columns=[col for col in column_names if col != image_column],
-            load_from_cache_file=not args.overwrite_cache,
+            load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on test dataset",
         )
 
@@ -677,50 +424,56 @@ def main():
         attention_mask = torch.tensor(
             [example["attention_mask"] for example in examples], dtype=torch.long
         )
-        return input_ids, attention_mask, prefix
-        # return {
-        #     "input_ids": input_ids,
-        #     "pixel_values": pixel_values,
-        #     "attention_mask": attention_mask,
-        #     # "return_loss": True,
-        # }
+        # return input_ids, attention_mask, prefix
+        return {
+            "tokens": input_ids,
+            "prefix": prefix,
+            "mask": attention_mask,
+        }
 
     # ----------------------------------------------------------------------------------------------
     # dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
 
-    prefix_dim = 640 if args.is_rn else 512
-    args.mapping_type = {
+    # prefix_dim = 640 if args.is_rn else 512
+    model_args.mapping_type = {
         "mlp": MappingType.MLP,
         "transformer": MappingType.Transformer,
-    }[args.mapping_type]
-    args.only_prefix = False
-    if args.only_prefix:
+    }[model_args.mapping_type]
+    # model_args.only_prefix = False
+    if model_args.only_prefix:
         model = ClipCaptionPrefix(
-            prefix_length,
-            clip_length=args.prefix_length_clip,
-            prefix_size=prefix_dim,
-            num_layers=args.num_layers,
-            mapping_type=args.mapping_type,
+            model_args.prefix_length,
+            clip_length=model_args.prefix_length_clip,
+            prefix_size=model_args.prefix_dim,
+            num_layers=model_args.num_layers,
+            mapping_type=model_args.mapping_type,
         )
         print("Train only prefix")
     else:
         model = ClipCaptionModel(
-            prefix_length,
-            clip_length=args.prefix_length_clip,
-            prefix_size=prefix_dim,
-            num_layers=args.num_layers,
-            mapping_type=args.mapping_type,
+            model_args.prefix_length,
+            clip_length=model_args.prefix_length_clip,
+            prefix_size=model_args.prefix_dim,
+            num_layers=model_args.num_layers,
+            mapping_type=model_args.mapping_type,
         )
         print("Train both prefix and GPT")
         sys.stdout.flush()
-    train(
-        train_dataset,
+
+    trainer = Trainer(
         model,
-        args,
-        output_dir=args.out_dir,
-        output_prefix=args.prefix,
-        collate_fn=collate_fn,
+        args=training_args,
+        train_dataset=train_dataset if training_args.do_train else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
+        data_collator=collate_fn,
     )
+    train_result = trainer.train()
+    trainer.save_model()
+    gpt2tokenizer.save_pretrained(model_args.output_dir)
+    image_processor.save_pretrained(model_args.output_dir)
+    trainer.log_metrics("train", train_result.metrics)
+    trainer.save_metrics("train", train_result.metrics)
+    trainer.save_state()
 
 
 if __name__ == "__main__":

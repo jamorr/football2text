@@ -54,8 +54,6 @@ from transformers import (
 )
 from torchmetrics.multimodal import CLIPScore
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
-from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 
