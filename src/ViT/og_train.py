@@ -42,6 +42,7 @@ from transformers.trainer_utils import get_last_checkpoint
 
 logger = logging.getLogger(__name__)
 
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 @dataclass
@@ -383,8 +384,8 @@ def main():
     # Evaluation
     if training_args.do_eval:
         metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics.metrics)
-        trainer.save_metrics("eval", metrics.metrics)
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
     # Write model card and (optionally) push to hub
     kwargs = {

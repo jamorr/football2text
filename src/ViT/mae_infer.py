@@ -59,15 +59,20 @@ def visualize(pixel_values, model, save_loc):
     show_image(im_paste[0], "reconstruction + visible", axes[3])
     fig.savefig(save_loc)
 
-def main():
+def main(args):
+    version_num, checkpoint_name = args.version_num, args.checkpoint_name
     here = pathlib.Path(__file__).parent
     root_dir = pathlib.Path("/media/jj_data")
     models_dir = root_dir / "models"
     vis_save_dir = here.parents[1] / "assets" / "ViT_examples"
     which = "test"
-    vit_ver = '5'
-    vit_pretrained = ViTMAEForPreTraining.from_pretrained(models_dir / "ViT" / vit_ver,)
-    image_processor = ViTImageProcessor.from_pretrained(models_dir / "ViT" / vit_ver,)
+    model_path = models_dir / "ViT" / version_num
+    if checkpoint_name is not None:
+        model_path = model_path / checkpoint_name
+    else:
+        checkpoint_name = 0
+    vit_pretrained = ViTMAEForPreTraining.from_pretrained(model_path)
+    image_processor = ViTImageProcessor.from_pretrained(model_path)
     global imagenet_mean, imagenet_std
     imagenet_mean = np.array(image_processor.image_mean)
     imagenet_std = np.array(image_processor.image_std)
@@ -80,7 +85,13 @@ def main():
     # feature_extractor = vit_pretrained.vit
     idx = np.random.randint(0, len(dset))
 
-    visualize(image_processor(dset[idx], return_tensors="pt").pixel_values, vit_pretrained, save_loc=vis_save_dir/f"test{timestamp}-v.{vit_ver}.jpeg")
+    visualize(image_processor(dset[idx], return_tensors="pt").pixel_values, vit_pretrained, save_loc=vis_save_dir/f"test{timestamp}-v.{version_num}.{checkpoint_name}.jpeg")
 
 if __name__ == "__main__":
-    main()
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument("-v", dest="version_num", default='5')
+    parser.add_argument("-c", dest="checkpoint_name", default=None)
+    args = parser.parse_args()
+
+    main(args)
