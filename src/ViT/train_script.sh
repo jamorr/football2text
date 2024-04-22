@@ -19,7 +19,8 @@ python og_train.py \
     --logging_steps 10 \
     --evaluation_strategy steps \
     --eval_steps 500 \
-    --save_strategy steps \
+    --metric_for_best_model eval_loss \
+    --save_strategy best \
     --save_total_limit 3 \
     --dataloader_num_workers 4 \
     --seed 1337 \
