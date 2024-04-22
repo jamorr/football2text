@@ -14,7 +14,7 @@
     "freeze_vision_model": true,
     "per_device_train_batch_size":124,
     "per_device_eval_batch_size":124,
-    "max_eval_samples":3000,
+    "max_eval_samples":6000,
     "learning_rate": 5e-05,
     "warmup_steps": 0,
     "num_train_epochs": 7,

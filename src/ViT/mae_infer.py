@@ -4,7 +4,7 @@ import pathlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from dataset import NFLImageDataset, NFLJPEGDataset
+from dataset import NFLJPEGDataset
 from matplotlib.axes import Axes
 from torchvision.transforms import (
     Compose,

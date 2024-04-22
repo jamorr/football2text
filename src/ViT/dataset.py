@@ -117,6 +117,7 @@ def write_mp4_to_jpeg(data_path:pathlib.Path, splits=("train", "test", "val")):
             im.save(sloc)
         print(f"finished writing {which} dataset in {perf_counter()-start:.2f}s")
 
+
 if __name__ == "__main__":
 
     data_dir = pathlib.Path(__file__).parents[2]/"data"

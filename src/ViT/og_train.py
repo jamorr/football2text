@@ -278,7 +278,7 @@ def main():
     elif model_args.model_name_or_path:
         image_processor = ViTImageProcessor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
-        image_processor = ViTImageProcessor()
+        image_processor = ViTImageProcessor(size={"height":224, "width":224}, image_mean=[0.96363677, 0.95584211, 0.95142412], image_std=[0.13587629, 0.15287788, 0.16444984])
 
     # create model
     if model_args.model_name_or_path:
@@ -383,8 +383,8 @@ def main():
     # Evaluation
     if training_args.do_eval:
         metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
+        trainer.log_metrics("eval", metrics.metrics)
+        trainer.save_metrics("eval", metrics.metrics)
 
     # Write model card and (optionally) push to hub
     kwargs = {
