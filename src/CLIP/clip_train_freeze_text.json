@@ -27,6 +27,5 @@
     "logging_steps": 10,
     "save_strategy": "steps",
     "save_total_limit": 3,
-    "dataloader_num_workers": 4,
-    "overwrite_output_dir":true
+    "dataloader_num_workers": 4
 }

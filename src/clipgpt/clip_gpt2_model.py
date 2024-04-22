@@ -1,12 +1,12 @@
+import copy
 from enum import Enum
 from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-from torch.nn import functional as nnf
-from transformers import (
-    GPT2LMHeadModel
-)
+from torch.nn import functional as F
+from transformers import GPT2LMHeadModel
+
 
 class MappingType(Enum):
     MLP = "mlp"
@@ -29,7 +29,7 @@ class MLP(nn.Module):
 
 class MlpTransformer(nn.Module):
     def __init__(
-        self, in_dim, h_dim, out_d: Optional[int] = None, act=nnf.relu, dropout=0.0
+        self, in_dim, h_dim, out_d: Optional[int] = None, act=F.relu, dropout=0.0
     ):
         super().__init__()
         out_d = out_d if out_d is not None else in_dim
@@ -100,7 +100,7 @@ class TransformerLayer(nn.Module):
         mlp_ratio=4.0,
         bias=False,
         dropout=0.0,
-        act=nnf.relu,
+        act=F.relu,
         norm_layer: nn.Module = nn.LayerNorm,
     ):
         super().__init__()
@@ -139,7 +139,7 @@ class Transformer(nn.Module):
         num_layers: int,
         dim_ref: Optional[int] = None,
         mlp_ratio: float = 2.0,
-        act=nnf.relu,
+        act=F.relu,
         norm_layer: nn.Module = nn.LayerNorm,
         enc_dec: bool = False,
     ):
@@ -214,9 +214,9 @@ class TransformerMapper(nn.Module):
 
 
 class ClipCaptionModel(nn.Module):
-
     def __init__(
         self,
+        clip_model,
         prefix_length: int,
         clip_length: Optional[int] = None,
         prefix_size: int = 512,
@@ -224,9 +224,12 @@ class ClipCaptionModel(nn.Module):
         mapping_type: MappingType = MappingType.MLP,
     ):
         super(ClipCaptionModel, self).__init__()
+        self.clip = clip_model
         self.prefix_length = prefix_length
         self.gpt = GPT2LMHeadModel.from_pretrained("gpt2")
-        self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
+        self.gpt_embedding_size = copy.deepcopy(
+            self.gpt.transformer.wte.weight.shape[1]
+        )
         if mapping_type == MappingType.MLP:
             self.clip_project = MLP(
                 (
@@ -252,12 +255,13 @@ class ClipCaptionModel(nn.Module):
     def forward(
         self,
         tokens: torch.Tensor,
-        prefix: torch.Tensor,
+        pixel_values: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
+        return_loss: bool = True,
     ):
-        # print(tokens)
-        # exit()
+        with torch.no_grad():
+            prefix = self.clip.get_image_features(pixel_values=pixel_values)
         embedding_text = self.gpt.transformer.wte(tokens)
         prefix_projections = self.clip_project(prefix).view(
             -1, self.prefix_length, self.gpt_embedding_size
@@ -267,8 +271,17 @@ class ClipCaptionModel(nn.Module):
             dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
             labels = torch.cat((dummy_token, tokens), dim=1)
         out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
+        if return_loss:
+            logits = out.logits[:, self.prefix_length - 1 : -1]
+            return {
+                "loss": F.cross_entropy(
+                    logits.reshape(-1, logits.shape[-1]),
+                    tokens.flatten(),
+                    ignore_index=0,
+                ),
+                "logits": logits,
+            }
         return out
-
 
 
 class ClipCaptionPrefix(ClipCaptionModel):
@@ -279,4 +292,3 @@ class ClipCaptionPrefix(ClipCaptionModel):
         super(ClipCaptionPrefix, self).train(mode)
         self.gpt.eval()
         return self
-

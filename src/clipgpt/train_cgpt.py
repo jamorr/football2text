@@ -1,36 +1,38 @@
 import argparse
-from dataclasses import dataclass, field
 import json
 import os
-import pickle
 import sys
-from enum import Enum
-from typing import Optional, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Optional
 
 import torch
-import torch.nn as nn
+from torch.nn.modules import Module
+from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.optimizer import Optimizer as Optimizer
+from torch.utils.data import Dataset
+from transformers.data.data_collator import DataCollator
+from transformers.modeling_utils import PreTrainedModel
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.trainer_callback import TrainerCallback
+from transformers.trainer_utils import EvalPrediction
+from clip_gpt2_model import ClipCaptionModel, ClipCaptionPrefix, MappingType
 from datasets import load_dataset
 from PIL import Image
-from torch.nn import functional as nnf
-from torch.utils.data import DataLoader, Dataset
 from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
-from tqdm import tqdm
-from torch.optim import  AdamW
 from transformers import (
-    GPT2LMHeadModel,
-    GPT2Tokenizer,
-    ViTImageProcessor,
-    get_linear_schedule_with_warmup,
     AutoModel,
-    Trainer,
+    GPT2Tokenizer,
     HfArgumentParser,
+    Trainer,
     TrainingArguments,
-)
-from clip_gpt2_model import ClipCaptionModel, ClipCaptionPrefix, MappingType
+    ViTImageProcessor,
+    VisionTextDualEncoderModel,
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+)
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 @dataclass
@@ -115,34 +117,27 @@ class ModelArguments:
             )
         },
     )
-    max_seq_len:Optional[int] = field(
-        default=128,
-        metadata={"help":"maximum length of a sequence"}
+    max_seq_len: Optional[int] = field(
+        default=128, metadata={"help": "maximum length of a sequence"}
     )
-    prefix_length:Optional[int] = field(
-        default=10,
-        metadata={"help":"maximum length of prefix sequence"}
+    prefix_length: Optional[int] = field(
+        default=10, metadata={"help": "maximum length of prefix sequence"}
     )
-    prefix_length_clip:Optional[int] = field(
-        default=10,
-        metadata={"help":"maximum length of prefix sequence"}
+    prefix_length_clip: Optional[int] = field(
+        default=10, metadata={"help": "maximum length of prefix sequence"}
     )
-    prefix_dim:Optional[int] = field(
-        default=512,
-        metadata={"help":"maximum length of a sequence"}
+    prefix_dim: Optional[int] = field(
+        default=512, metadata={"help": "maximum length of a sequence"}
     )
-    num_layers:Optional[int] = field(
-        default=8,
-        metadata={"help":"MLP layers in projection from clip to GPT2"}
+    num_layers: Optional[int] = field(
+        default=8, metadata={"help": "MLP layers in projection from clip to GPT2"}
     )
-    mapping_type:Optional[str] = field(
-        default="mlp",
-        metadata={"help":"What kind of layers to use for projection"}
+    mapping_type: Optional[str] = field(
+        default="mlp", metadata={"help": "What kind of layers to use for projection"}
+    )
+    only_prefix: Optional[bool] = field(default=False)
 
-    )
-    only_prefix: Optional[bool] = field(
-        default=False
-    )
+
 @dataclass
 class DataTrainingArguments:
     """
@@ -251,7 +246,9 @@ def save_config(args: argparse.Namespace):
 
 
 def main():
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments)) #type:ignore
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments) # type:ignore
+    )
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
@@ -262,13 +259,11 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # args = parser.parse_args()
-    # prefix_length = args.prefix_length
     dataset = load_dataset(data_args.dataset_name, name=data_args.dataset_config_name)
 
-    gpt2tokenizer:GPT2Tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    gpt2tokenizer: GPT2Tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
     # gpt2tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
-    clip_model = AutoModel.from_pretrained(model_args.pretrained_clip_name_or_path)
 
     # Jack Dataset
     # ----------------------------------------------------------------------------------------------------------------------------------#
@@ -278,9 +273,11 @@ def main():
     def pad_tokens(tokens):
         padding = model_args.max_seq_len - len(tokens)
         if padding > 0:
-            tokens = torch.cat((torch.tensor(tokens), torch.zeros(padding, dtype=torch.int64) - 1))
+            tokens = torch.cat(
+                (torch.tensor(tokens), torch.zeros(padding, dtype=torch.int64) - 1)
+            )
         elif padding < 0:
-            tokens = tokens[:model_args.max_seq_len]
+            tokens = tokens[: model_args.max_seq_len]
         mask = tokens.ge(0)  # mask is zero where we out of sequence
         tokens[~mask] = 0
         mask = mask.float()
@@ -296,7 +293,9 @@ def main():
             max_length=model_args.max_seq_len,
             truncation=True,
         )
-        input_ids, attention_mask = list(zip(*[pad_tokens(ids) for ids in text_inputs.input_ids]))
+        input_ids, attention_mask = list(
+            zip(*[pad_tokens(ids) for ids in text_inputs.input_ids])
+        )
 
         examples["input_ids"] = list(input_ids)
         examples["attention_mask"] = list(attention_mask)
@@ -318,12 +317,14 @@ def main():
                 x = self.transforms(x)
             return x
 
-    image_processor = ViTImageProcessor.from_pretrained(model_args.image_processor_name_or_path)
+    image_processor = ViTImageProcessor.from_pretrained(
+        model_args.image_processor_name_or_path
+    )
 
     image_transformations = Transform(
         224,
-        image_processor.image_mean,
-        image_processor.image_std,
+        image_processor.image_mean, # type:ignore
+        image_processor.image_std, # type:ignore
     )
 
     def transform_images(examples):
@@ -331,8 +332,9 @@ def main():
             read_image(image_file, mode=ImageReadMode.RGB)
             for image_file in examples[image_column]
         ]
-        examples["pixel_values"] = [image_transformations(image) for image in images]
-        examples["prefix"] = clip_model.get_image_features(pixel_values=torch.stack(examples["pixel_values"]))
+        images = [image_transformations(image) for image in images]
+
+        examples["pixel_values"] = images
         return examples
 
     def filter_corrupt_images(examples):
@@ -345,6 +347,7 @@ def main():
             except Exception:
                 valid_images.append(False)
         return valid_images
+    # column_names = dataset.column_names
     if training_args.do_train:
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
@@ -363,6 +366,12 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on train dataset",
         )
+        # train_dataset = train_dataset.map(
+        #     function=transform_images,
+        #     load_from_cache_file=not data_args.overwrite_cache,
+        #     # remove_columns=[image_column],
+        #     desc="Running image transforms on train datast"
+        # )
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         train_dataset.set_transform(transform_images)
 
@@ -387,7 +396,12 @@ def main():
             # load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on validation dataset",
         )
-
+        # eval_dataset = eval_dataset.map(
+        #     function=transform_images,
+        #     load_from_cache_file=not data_args.overwrite_cache,
+        #     # remove_columns=[image_column],
+        #     desc="Running image transforms on train datast"
+        # )
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         eval_dataset.set_transform(transform_images)
 
@@ -412,12 +426,19 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on test dataset",
         )
-
+        # test_dataset = test_dataset.map(
+        #     function=transform_images,
+        #     load_from_cache_file=not data_args.overwrite_cache,
+        #     remove_columns=[image_column],
+        #     desc="Running image transforms on train datast"
+        # )
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         test_dataset.set_transform(transform_images)
 
     def collate_fn(examples):
-        prefix = torch.stack([example["prefix"] for example in examples])
+        pixel_values = torch.stack([example["pixel_values"] for example in examples])
+
+        # prefix = torch.stack([example["prefix"] for example in examples])
         input_ids = torch.tensor(
             [example["input_ids"] for example in examples], dtype=torch.long
         )
@@ -427,21 +448,24 @@ def main():
         # return input_ids, attention_mask, prefix
         return {
             "tokens": input_ids,
-            "prefix": prefix,
+            "pixel_values": pixel_values,
             "mask": attention_mask,
+            "return_loss":True,
         }
 
     # ----------------------------------------------------------------------------------------------
-    # dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
-
-    # prefix_dim = 640 if args.is_rn else 512
     model_args.mapping_type = {
         "mlp": MappingType.MLP,
         "transformer": MappingType.Transformer,
     }[model_args.mapping_type]
-    # model_args.only_prefix = False
+
+    clip_model:VisionTextDualEncoderModel = AutoModel.from_pretrained(model_args.pretrained_clip_name_or_path)
+    clip_model = clip_model.eval()
+    clip_model = torch.compile(clip_model, mode="max-autotune")
+    clip_model.to(device="cuda")
     if model_args.only_prefix:
         model = ClipCaptionPrefix(
+            clip_model,
             model_args.prefix_length,
             clip_length=model_args.prefix_length_clip,
             prefix_size=model_args.prefix_dim,
@@ -450,7 +474,9 @@ def main():
         )
         print("Train only prefix")
     else:
+
         model = ClipCaptionModel(
+            clip_model,
             model_args.prefix_length,
             clip_length=model_args.prefix_length_clip,
             prefix_size=model_args.prefix_dim,
@@ -467,14 +493,20 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         data_collator=collate_fn,
     )
-    train_result = trainer.train()
-    trainer.save_model()
-    gpt2tokenizer.save_pretrained(model_args.output_dir)
-    image_processor.save_pretrained(model_args.output_dir)
-    trainer.log_metrics("train", train_result.metrics)
-    trainer.save_metrics("train", train_result.metrics)
-    trainer.save_state()
-
+    if training_args.do_train:
+        train_result = trainer.train()
+        trainer.save_model()
+        gpt2tokenizer.save_pretrained(model_args.output_dir)
+        image_processor.save_pretrained(model_args.output_dir)
+        trainer.log_metrics("train", train_result.metrics)
+        trainer.save_metrics("train", train_result.metrics)
+        trainer.save_state()
+        clip_model.save_pretrained(model_args.output_dir)
+    # 10. Evaluation and Testing
+    if training_args.do_eval:
+        metrics = trainer.evaluate()
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
 if __name__ == "__main__":
     main()
