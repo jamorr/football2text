@@ -25,6 +25,7 @@ from transformers import (
     AutoModel
 )
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 class MappingType(Enum):
     MLP = "mlp"
@@ -400,7 +401,7 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = "_latest"):
         model = ClipCaptionModel(args.prefix_length)
     if os.path.isfile(model_path):
         print(f"loading model from {model_path}")
-        model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
+        model.load_state_dict(torch.load(model_path, map_location=torch.device("cuda")))
     else:
         print(f"{model_path} is not exist")
     return model, parser
@@ -416,7 +417,7 @@ def train(
     output_prefix: str = "",
     collate_fn=None,
 ):
-    device = torch.device("cpu")
+    device = torch.device("cuda")
     # device = torch.device('cuda:0')
     batch_size = args.bs
     epochs = args.epochs
@@ -584,7 +585,7 @@ def main():
             for image_file in examples[image_column]
         ]
         examples["pixel_values"] = [image_transformations(image) for image in images]
-        examples["prefix"] = [clip_model.get_image_features(pixel_values=image.unsqueeze(0)) for image in examples["pixel_values"]]
+        examples["prefix"] = clip_model.get_image_features(pixel_values=torch.stack(examples["pixel_values"]))
         return examples
 
     def filter_corrupt_images(examples):
