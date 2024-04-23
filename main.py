@@ -1,8 +1,14 @@
 import argparse
 import os
 import pathlib
+import subprocess
+import sys
+
+from lightning.pytorch import LightningDataModule, seed_everything
+from src.ViT import write_mp4_to_jpeg
 from src.dataset import NFLDataModule
-from src.data2mp4 import prepare_mp4s
+from src.CLIP import create_parquets
+from src.ViT import calc_mean_std_images, NFLJPEGDataset, write_mp4_to_jpeg
 
 data_path = pathlib.Path("/data")
 models_path = pathlib.Path("/media/jj_data/models")
@@ -12,8 +18,6 @@ def main():
     parser.add_argument('--data-path', dest='data_dir', type=str, default=data_path)
     parser.add_argument('--checkpoint-path', dest='check_path',type=str, default=None, help='Location of checkpoint to use or ')
     parser.add_argument('--save-path', dest='save_path',type=str, default=models_path, help='Location to save checkpoints')
-    parser.add_argument('--triton-so-path', dest="triton_so_path", default="/usr/lib/x86_64-linux-gnu",help='Path to libcuda.so file (may be needed for some triton installs)')
-    parser.add_argument('--use-triton', action='store_true')
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--print-model', action='store_true')
     parser.add_argument('--num-labels', dest='num_labels', type=int, default=7, help='Number of classes in target')
@@ -34,7 +38,7 @@ def main():
     parser.add_argument('--patience', type=int, default=100, help='Early stopping patience')
     parser.add_argument('--clip', type=float, default=0.8, help='Gradient clip value')
     parser.add_argument('--log-interval',dest='log_interval', type=int, default=50, help='Number of training steps between logging')
-    parser.add_argument('--seed', type=int, default=1111, help='random seed')
+    parser.add_argument('--seed', type=int, default=37, help='random seed')
     parser.add_argument('--load-best', action="store_true", help='load best checkpoint')
 
 
@@ -46,4 +50,62 @@ def main():
 
 if __name__ == "__main__":
     args = main()
+    seed_everything(args.seed, True)
+
+    if args.prepare_data:
+        dm = NFLDataModule(args.data_path)
+        dm.prepare_data()
+        write_mp4_to_jpeg(args.data_path)
+        create_parquets(args.data_path)
+
+
+    here = pathlib.Path(__file__).parent
+
+    if args.train_vit:
+        floc = here / "src" / "ViT"
+        floc = str(floc.absolute())
+        process = subprocess.Popen(
+            f"python {floc}/train_script.sh",
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        out, err = process.communicate()
+
+        result = out.split('\n')
+        for lin in result:
+            if not lin.startswith('#'):
+                print(lin)
+
+
+    if args.train_roberta:
+        floc = here / "src" / "RoBERTa"
+        floc = str(floc.absolute())
+        process = subprocess.Popen(
+            f"python {floc}/train.sh",
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+
+        out, err = process.communicate()
+
+        result = out.split('\n')
+        for lin in result:
+            if not lin.startswith('#'):
+                print(lin)
+
+
+    if args.train_clip:
+        floc = here / "src" / "RoBERTa"
+        floc = str(floc.absolute())
+        process = subprocess.Popen(
+            f"python {floc}/train.sh",
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        out, err = process.communicate()
+
+        result = out.split('\n')
+        for lin in result:
+            if not lin.startswith('#'):
+                print(lin)
 

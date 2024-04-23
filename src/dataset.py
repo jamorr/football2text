@@ -207,8 +207,9 @@ class NFLDataModule(LightningDataModule):
         self._move_files_to_split_directory("val", val_df)
         print("Deleting all leftover folders")
         shutil.rmtree(self.data_path/"tracking_weeks")
-        print("Preparing MP4s")
-
+        # untested... may be best to comment this out and run in a different folder
+        print("Generating MP4s")
+        prepare_mp4s(self.data_path)
 
     def _move_files_to_split_directory(self, split_name, split_df):
         (self.data_path/split_name).mkdir()

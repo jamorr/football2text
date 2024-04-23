@@ -11,14 +11,11 @@ from transformers import (
     ViTMAEForPreTraining,
 )
 
-# make the plt figure larger
-plt.rcParams["figure.figsize"] = [20, 5]
-
 
 def show_image(image, title, ax: Axes):
     # image is [H, W, 3]
     assert image.shape[2] == 3
-    ax.imshow(torch.clip((image * imagenet_std + imagenet_mean) * 255, 0, 255).int())
+    ax.imshow(torch.clip((image * image_data_std + image_data_mean) * 255, 0, 255).int())
     ax.set_title(title, fontsize=16)
     ax.axis("off")
 
@@ -46,7 +43,7 @@ def visualize(pixel_values, model, save_loc):
     im_paste = x * (1 - mask) + y * mask
 
     fig, axes = plt.subplots(1, 4, layout="constrained")
-
+    fig.set_size_inches(20, 5)
     show_image(x[0], "original", axes[0])
     show_image(im_masked[0], "masked", axes[1])
     show_image(y[0], "reconstruction", axes[2])
@@ -54,10 +51,8 @@ def visualize(pixel_values, model, save_loc):
     fig.savefig(save_loc)
 
 
-def main(args):
-    version_num, checkpoint_name = args.version_num, args.checkpoint_name
+def visualize_inference(version_num, checkpoint_name, root_dir):
     here = pathlib.Path(__file__).parent
-    root_dir = pathlib.Path("/media/jj_data")
     models_dir = root_dir / "models"
     vis_save_dir = here.parents[1] / "assets" / "ViT_examples"
     which = "test"
@@ -68,9 +63,9 @@ def main(args):
         checkpoint_name = 0
     vit_pretrained = ViTMAEForPreTraining.from_pretrained(model_path)
     image_processor = ViTImageProcessor.from_pretrained(model_path)
-    global imagenet_mean, imagenet_std
-    imagenet_mean = np.array(image_processor.image_mean)
-    imagenet_std = np.array(image_processor.image_std)
+    global image_data_mean, image_data_std
+    image_data_mean = np.array(image_processor.image_mean)
+    image_data_std = np.array(image_processor.image_std)
     data_dir = root_dir / "data" / which
 
     # image_processor = ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base")
@@ -93,6 +88,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-v", dest="version_num", default="5")
     parser.add_argument("-c", dest="checkpoint_name", default=None)
+    parser.add_argument("-d", dest="root_dir", default=pathlib.Path("/media/jj_data"))
     args = parser.parse_args()
 
-    main(args)
+    visualize_inference(args.version_num, args.checkpoint_name,  args.root_dir)
