@@ -1,0 +1,21 @@
+name: football
+channels:
+  - defaults
+  - conda-forge
+  - nvidia
+  - pytorch
+dependencies:
+  - ffmpeg
+  - ipykernel
+  - lightning
+  - matplotlib
+  - pandas
+  - pyarrow
+  - python=3.11
+  - pytorch
+  - seaborn
+  - torchvision
+  - torchmetrics=0.7.0
+  - av
+  - pytorch-cuda=12.1
+  - torchaudio

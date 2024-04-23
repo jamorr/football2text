@@ -1,0 +1,20 @@
+python run_clip.py \
+    --output_dir /media/jj_data/models/CLIP/3 \
+    --model_name_or_path /media/jj_data/models/clip-roberta \
+    --dataset_name /media/jj_data/data/CLIP \
+    --dataset_config_name main \
+    --image_column pixel_values \
+    --caption_column input_ids \
+    --remove_unused_columns True \
+    --do_train \
+    --freeze_vision_model \
+    --per_device_train_batch_size 124 \
+    --learning_rate 5e-5 \
+    --warmup_steps 0 \
+    --num_train_epochs 7 \
+    --weight_decay 0.1 \
+    --logging_strategy steps \
+    --logging_steps 10 \
+    --save_strategy steps \
+    --save_total_limit 3 \
+    --dataloader_num_workers 4 \
