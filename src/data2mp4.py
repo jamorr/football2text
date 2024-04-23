@@ -14,11 +14,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
-data_dir = pathlib.Path(__file__).parents[1] / "data"
-
-TEAM_MAP = pd.read_parquet(data_dir / "team_id_map.parquet").to_dict()["category"]
-TEAM_MAP[-1] = "football"
-REV_TEAM_MAP = {name: idx for idx, name in TEAM_MAP.items()}
 
 colors = {
     "ARI": ["#97233F", "#000000", "#FFB612"],
@@ -187,8 +182,12 @@ def animate_play_tensor(dataloader_input, save_loc):
             writer=animation.FFMpegWriter(fps=10, codec="h264"),
         )
 
-def prepare_mp4s():
+def prepare_mp4s(data_dir= pathlib.Path(__file__).parents[1] / "data"):
     mp.set_start_method("spawn")
+    global TEAM_MAP, REV_TEAM_MAP
+    TEAM_MAP = pd.read_parquet(data_dir / "team_id_map.parquet").to_dict()["category"]
+    TEAM_MAP[-1] = "football"
+    REV_TEAM_MAP = {name: idx for idx, name in TEAM_MAP.items()}
 
     for which in ("val", "test", "train"):
         save_loc = data_dir / which / "mp4_data"
@@ -208,8 +207,3 @@ def prepare_mp4s():
 
 if __name__ == "__main__":
     prepare_mp4s()
-    # for i, data in enumerate(dataloader):
-    #     animate_with_saveloc(data)
-    #     if i == 3:
-    #         print(f"Time to write images: {time.perf_counter() - start:.2f}")
-    #         exit()

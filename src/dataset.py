@@ -12,7 +12,7 @@ from torchvision.io import read_video
 from towhee import ops
 from towhee.models.clip.clip_utils import tokenize
 from torchvision import transforms
-
+from data2mp4 import prepare_mp4s
 
 # TODO: #2 add padding to make stackable outputs/batchsize > 1
 # TODO: #1 preprocess text into token ids
@@ -32,40 +32,42 @@ class NFLDataset(Dataset):
         # self.teams = pd.read_parquet(data_path/'team_id_map.parquet', dtype_backend='numpy_nullable')
         # self.directions = pd.read_parquet(data_path/'direction_id_map.parquet', dtype_backend='numpy_nullable')
         # self.events = pd.read_parquet(data_path/'events_id_map.parquet', dtype_backend='numpy_nullable')
+        image_mean=[0.96363677, 0.95584211, 0.95142412],
+        image_std=[0.13587629, 0.15287788, 0.16444984],
         self.tfms = transforms.Compose([
             transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(
-                (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
+               image_mean, image_std)
         ])
     def __len__(self):
         return len(self.target)
 
     def __getitem__(self, index) -> Any:
         target_play = self.target.iloc[index]
-        if self.include_str_types:
-            file_path = self.data_dir/"mp4_data"/f'{target_play["gameId"]}-{target_play["playId"]}.mp4'
-            assert file_path.exists()
-            # video, *_ = read_video(str(file_path.absolute()))
-            img_list = list(ops.video_decode.ffmpeg()(str(file_path.absolute())))[:12]
-            # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
-            token = tokenize(target_play['playDescription'])
-            # print(len(video), video[0].shape)
+        # if self.include_str_types:
+        #     file_path = self.data_dir/"mp4_data"/f'{target_play["gameId"]}-{target_play["playId"]}.mp4'
+        #     assert file_path.exists()
+        #     # video, *_ = read_video(str(file_path.absolute()))
+        #     img_list = list(ops.video_decode.ffmpeg()(str(file_path.absolute())))[:12]
+        #     # return video, ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription'])
+        #     token = tokenize(target_play['playDescription'])
+        #     # print(len(video), video[0].shape)
 
-            max_frames = 12
-            video = np.zeros((1, max_frames, 1, 3, 224, 224), dtype=np.float64)
-            slice_len = len(img_list)
-            max_video_length = 0 if 0 > slice_len else slice_len
-            for i, img in enumerate(img_list):
-                pil_img = PILImage.fromarray(img, "RGB")
-                tfmed_img = self.tfms(pil_img).unsqueeze(0)  #type:ignore
-                if slice_len >= 1:
-                    video[0, i, ...] = tfmed_img.cpu().numpy()
-            video_mask = np.zeros((1, max_frames), dtype=np.int32)
-            video_mask[0, :max_video_length] = [1] * max_video_length
+        #     max_frames = 12
+        #     video = np.zeros((1, max_frames, 1, 3, 224, 224), dtype=np.float64)
+        #     slice_len = len(img_list)
+        #     max_video_length = 0 if 0 > slice_len else slice_len
+        #     for i, img in enumerate(img_list):
+        #         pil_img = PILImage.fromarray(img, "RGB")
+        #         tfmed_img = self.tfms(pil_img).unsqueeze(0)  #type:ignore
+        #         if slice_len >= 1:
+        #             video[0, i, ...] = tfmed_img.cpu().numpy()
+        #     video_mask = np.zeros((1, max_frames), dtype=np.int32)
+        #     video_mask[0, :max_video_length] = [1] * max_video_length
 
-            return token, video, video_mask
+        #     return token, video, video_mask
             # return ops.clip4clip.utils.convert_tokens_to_id(ops.clip4clip.utils.tokenizer, target_play['playDescription']), video, torch.ones(len(video))
 
         play_data = pd.read_parquet(
@@ -80,13 +82,12 @@ class NFLDataset(Dataset):
         play_data[self.tracking_cols] = play_data[self.tracking_cols].astype(np.float32)
         play_data = play_data[self.id_cols + self.tracking_cols]
         # organize into frames
-        # print([group for _, group in play_data.groupby("frameId", as_index=True)][0])
         framewise_data = np.array([group.values for _, group in play_data.groupby("frameId", as_index=True)])
         int_cols = framewise_data[:, :, :len(self.id_cols)].astype(np.int32)  # Contains the first three columns
         float_cols = framewise_data[:, :, len(self.id_cols):].astype(np.float32)
-        # if self.include_str_types:
-        #     players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
-        #     return int_cols, float_cols, players, target_play
+        if self.include_str_types:
+            players = self.players[self.players['nflId'].isin(play_data['nflId'].unique())]
+            return int_cols, float_cols, players, target_play
 
         return int_cols, float_cols, torch.tensor((target_play["gameId"], target_play["playId"]), dtype=torch.int32), target_play['absoluteYardlineNumber'], target_play['yardsToGo']
 
@@ -206,7 +207,9 @@ class NFLDataModule(LightningDataModule):
         self._move_files_to_split_directory("val", val_df)
         print("Deleting all leftover folders")
         shutil.rmtree(self.data_path/"tracking_weeks")
-
+        # untested... may be best to comment this out and run in a different folder
+        print("Generating MP4s")
+        prepare_mp4s(self.data_path)
 
     def _move_files_to_split_directory(self, split_name, split_df):
         (self.data_path/split_name).mkdir()

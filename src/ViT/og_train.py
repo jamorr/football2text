@@ -21,12 +21,19 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import torch
-from datasets import load_dataset
-from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor, ToPILImage
-from torchvision.io import ImageReadMode, read_image
-from torchvision.transforms.functional import InterpolationMode
-
 import transformers
+from datasets import load_dataset
+from torchvision.io import ImageReadMode, read_image
+from torchvision.transforms import (
+    Compose,
+    Lambda,
+    Normalize,
+    RandomHorizontalFlip,
+    RandomResizedCrop,
+    ToPILImage,
+    ToTensor,
+)
+from torchvision.transforms.functional import InterpolationMode
 from transformers import (
     HfArgumentParser,
     Trainer,
@@ -36,7 +43,6 @@ from transformers import (
     ViTMAEForPreTraining,
 )
 from transformers.trainer_utils import get_last_checkpoint
-
 
 """ Pre-training a 🤗 ViT model as an MAE (masked autoencoder), as proposed in https://arxiv.org/abs/2111.06377."""
 
@@ -55,16 +61,24 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="cifar10", metadata={"help": "Name of a dataset from the datasets package"}
+        default="cifar10",
+        metadata={"help": "Name of a dataset from the datasets package"},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     image_column_name: Optional[str] = field(
         default=None, metadata={"help": "The column name of the images in the files."}
     )
-    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
-    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
+    train_dir: Optional[str] = field(
+        default=None, metadata={"help": "A folder containing the training data."}
+    )
+    validation_dir: Optional[str] = field(
+        default=None, metadata={"help": "A folder containing the validation data."}
+    )
     train_val_split: Optional[float] = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
@@ -111,7 +125,10 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name_or_path"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name_or_path"
+        },
     )
     config_overrides: Optional[str] = field(
         default=None,
@@ -123,13 +140,20 @@ class ModelArguments:
         },
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from s3"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
-    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(
+        default=None, metadata={"help": "Name or path of preprocessor config."}
+    )
     token: str = field(
         default=None,
         metadata={
@@ -146,17 +170,26 @@ class ModelArguments:
         },
     )
     mask_ratio: float = field(
-        default=0.75, metadata={"help": "The ratio of the number of masked tokens in the input sequence."}
+        default=0.75,
+        metadata={
+            "help": "The ratio of the number of masked tokens in the input sequence."
+        },
     )
     norm_pix_loss: bool = field(
-        default=True, metadata={"help": "Whether or not to train with normalized pixel values as target."}
+        default=True,
+        metadata={
+            "help": "Whether or not to train with normalized pixel values as target."
+        },
     )
 
 
 @dataclass
 class CustomTrainingArguments(TrainingArguments):
     base_learning_rate: float = field(
-        default=1e-3, metadata={"help": "Base learning rate: absolute_lr = base_lr * total_batch_size / 256."}
+        default=1e-3,
+        metadata={
+            "help": "Base learning rate: absolute_lr = base_lr * total_batch_size / 256."
+        },
     )
 
 
@@ -170,11 +203,15 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, CustomTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, CustomTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -184,9 +221,10 @@ def main():
             FutureWarning,
         )
         if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
         model_args.token = model_args.use_auth_token
-
 
     # Setup logging
     logging.basicConfig(
@@ -214,14 +252,20 @@ def main():
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -237,7 +281,9 @@ def main():
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
+    data_args.train_val_split = (
+        None if "validation" in ds.keys() else data_args.train_val_split
+    )
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = ds["train"].train_test_split(data_args.train_val_split)
         ds["train"] = split["train"]
@@ -256,7 +302,9 @@ def main():
     if model_args.config_name:
         config = ViTMAEConfig.from_pretrained(model_args.config_name, **config_kwargs)
     elif model_args.model_name_or_path:
-        config = ViTMAEConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        config = ViTMAEConfig.from_pretrained(
+            model_args.model_name_or_path, **config_kwargs
+        )
     else:
         config = ViTMAEConfig()
         logger.warning("You are instantiating a new config instance from scratch.")
@@ -275,11 +323,19 @@ def main():
 
     # create image processor
     if model_args.image_processor_name:
-        image_processor = ViTImageProcessor.from_pretrained(model_args.image_processor_name, **config_kwargs)
+        image_processor = ViTImageProcessor.from_pretrained(
+            model_args.image_processor_name, **config_kwargs
+        )
     elif model_args.model_name_or_path:
-        image_processor = ViTImageProcessor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        image_processor = ViTImageProcessor.from_pretrained(
+            model_args.model_name_or_path, **config_kwargs
+        )
     else:
-        image_processor = ViTImageProcessor(size={"height":224, "width":224}, image_mean=[0.96363677, 0.95584211, 0.95142412], image_std=[0.13587629, 0.15287788, 0.16444984])
+        image_processor = ViTImageProcessor(
+            size={"height": 224, "width": 224},
+            image_mean=[0.96363677, 0.95584211, 0.95142412],
+            image_std=[0.13587629, 0.15287788, 0.16444984],
+        )
 
     # create model
     if model_args.model_name_or_path:
@@ -319,7 +375,9 @@ def main():
         [
             ToPILImage("RGB"),
             # Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
-            RandomResizedCrop(size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),
+            RandomResizedCrop(
+                size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC
+            ),
             RandomHorizontalFlip(),
             ToTensor(),
             Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
@@ -327,17 +385,22 @@ def main():
     )
 
     def transform_images(examples):
-        images = [read_image(image_file, mode=ImageReadMode.RGB) for image_file in examples[image_column_name]]
+        images = [
+            read_image(image_file, mode=ImageReadMode.RGB)
+            for image_file in examples[image_column_name]
+        ]
         examples["pixel_values"] = [transforms(image) for image in images]
         return examples
-
-
 
     if training_args.do_train:
         if "train" not in ds:
             raise ValueError("--do_train requires a train dataset")
         if data_args.max_train_samples is not None:
-            ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            ds["train"] = (
+                ds["train"]
+                .shuffle(seed=training_args.seed)
+                .select(range(data_args.max_train_samples))
+            )
         # Set the training transforms
         ds["train"].set_transform(transform_images)
 
@@ -346,17 +409,23 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         if data_args.max_eval_samples is not None:
             ds["validation"] = (
-                ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+                ds["validation"]
+                .shuffle(seed=training_args.seed)
+                .select(range(data_args.max_eval_samples))
             )
         # Set the validation transforms
         ds["validation"].set_transform(transform_images)
 
     # Compute absolute learning rate
     total_train_batch_size = (
-        training_args.train_batch_size * training_args.gradient_accumulation_steps * training_args.world_size
+        training_args.train_batch_size
+        * training_args.gradient_accumulation_steps
+        * training_args.world_size
     )
     if training_args.base_learning_rate is not None:
-        training_args.learning_rate = training_args.base_learning_rate * total_train_batch_size / 256
+        training_args.learning_rate = (
+            training_args.base_learning_rate * total_train_batch_size / 256
+        )
 
     # Initialize our trainer
     trainer = Trainer(
