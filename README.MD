@@ -11,21 +11,22 @@ Image2Text
 - Now all data should be organized into parquet files which are parsable by the huggingface dataset module
 - To use our scripts it is recommended that you move the README.md file from the /assets directory to the /data/CLIP directory.
 - The directory structure should be as follows:
-    ├─/data
-    │ ├─/CLIP
-    │ │ ├─train
-    │ │ ├─test
-    │ │ ├─validation
-    │ │ └─README.md
-    │ ├─/train
-    │ ├─/test
-    │ ├─/val
-    │ └─<csv and parquet files>
-    ├─/models
-    ├─/assets
-    ├─/src
-    ├─README.MD
-    └─requirements.yml
+
+├─/data  
+│ ├─/CLIP  
+│ │ ├─train  
+│ │ ├─test  
+│ │ ├─validation  
+│ │ └─README.md  
+│ ├─/train  
+│ ├─/test  
+│ ├─/val  
+│ └─<csv and parquet files  
+├─/models  
+├─/assets  
+├─/src  
+├─README.MD 
+└─requirements.yml  
 
 - To train the model each individual piece must first be trained in sequence
     1. Train RoBERTa and ViT MAE on the text and image data respectively
