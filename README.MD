@@ -25,7 +25,7 @@ Image2Text
 ├─/models  
 ├─/assets  
 ├─/src  
-├─README.MD 
+├─README.MD  
 └─requirements.yml  
 
 - To train the model each individual piece must first be trained in sequence
